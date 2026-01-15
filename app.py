@@ -1,90 +1,164 @@
 import streamlit as st
 import pandas as pd
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import re
 
 # =========================
-# アプリの基本設定
+# 基本設定
 # =========================
 
-st.set_page_config(page_title="楽譜管理アプリ", layout="wide")
-st.title("🎼 楽譜管理アプリ（OneDrive対応）")
+st.set_page_config(
+    page_title="楽譜管理アプリ（Google Drive）",
+    layout="wide"
+)
+
+st.title("🎼 楽譜管理アプリ（Google Drive連携・CSV不要）")
 
 st.write("""
-OneDriveに保存している楽譜を  
-**題名・作曲者・声部**で検索・管理できます。
+Google Drive 上の楽譜PDFを  
+**題名・作曲者・声部・区分**で検索できます。
+
+📁 ファイル名形式（確定）  
+`五十音コード題名-XYZ作曲者.pdf`
 """)
 
-CSV_PATH = "scores.csv"
-
 # =========================
-# データ読み込み・保存
+# Google Drive 設定
 # =========================
 
-@st.cache_data
-def load_data():
-    return pd.read_csv(CSV_PATH)
-
-def save_data(df):
-    df.to_csv(CSV_PATH, index=False)
-    st.cache_data.clear()
-
-df = load_data()
+SERVICE_ACCOUNT_FILE = "service_account.json"
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+FOLDER_ID = "ここにフォルダIDを入れる"
 
 # =========================
-# 楽譜の追加画面
+# 定義マップ
 # =========================
 
-st.subheader("➕ 楽譜を追加")
+TYPE_MAP = {
+    "A": "オリジナル（伴奏有）",
+    "B": "オリジナル（無伴奏）",
+    "C": "アレンジ",
+    "D": "特殊"
+}
 
-with st.form("add_score_form"):
-    col1, col2 = st.columns(2)
+PART_BASE_MAP = {
+    "G": "混声",
+    "F": "女声",
+    "M": "男声",
+    "U": "斉唱"
+}
 
-    with col1:
-        new_title = st.text_input("題名")
-        new_composer = st.text_input("作曲者")
+NUM_MAP = {
+    "2": "二部",
+    "3": "三部",
+    "4": "四部"
+}
 
-    with col2:
-        new_part = st.selectbox(
-            "声部",
-            ["混声四部", "混声三部", "女声", "男声", "斉唱"]
-        )
-        new_url = st.text_input("OneDriveリンク")
+PART_OPTIONS = [
+    "混声三部", "混声四部",
+    "女声二部", "女声三部", "女声四部",
+    "男声二部", "男声三部", "男声四部",
+    "斉唱"
+]
 
-    submitted = st.form_submit_button("追加")
+TYPE_OPTIONS = list(TYPE_MAP.values())
 
-    if submitted:
-        if new_title and new_composer and new_url:
-            new_row = pd.DataFrame([{
-                "title": new_title,
-                "composer": new_composer,
-                "part": new_part,
-                "url": new_url
-            }])
-            df = pd.concat([df, new_row], ignore_index=True)
-            save_data(df)
-            st.success("楽譜を追加しました")
-            st.rerun()
+# =========================
+# ファイル名解析
+# =========================
+
+def parse_filename(filename):
+    """
+    例:
+    11AveMaria-AG4Bach.pdf
+    """
+
+    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
+    match = re.match(pattern, filename)
+
+    if not match:
+        return None
+
+    code, title, x, y, z, composer = match.groups()
+
+    # 混声二部は存在しない
+    if y == "G" and z == "2":
+        return None
+
+    work_type = TYPE_MAP[x]
+
+    if y == "U":
+        part = "斉唱"
+    else:
+        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
+
+    return {
+        "code": code,               # 並び順専用（非表示）
+        "title": title.strip(),
+        "composer": composer.strip(),
+        "part": part,
+        "type": work_type
+    }
+
+# =========================
+# Google Drive 読み込み
+# =========================
+
+@st.cache_data(show_spinner=False)
+def load_from_drive():
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=SCOPES
+    )
+    service = build("drive", "v3", credentials=credentials)
+
+    results = service.files().list(
+        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
+        fields="files(name, webViewLink)"
+    ).execute()
+
+    rows = []
+    errors = []
+
+    for f in results.get("files", []):
+        parsed = parse_filename(f["name"])
+        if parsed:
+            rows.append({
+                **parsed,
+                "url": f["webViewLink"]
+            })
         else:
-            st.error("すべての項目を入力してください")
+            errors.append(f["name"])
+
+    df = pd.DataFrame(rows)
+
+    if not df.empty:
+        df = df.sort_values("code")
+
+    return df, errors
+
+df, error_files = load_from_drive()
 
 # =========================
-# 検索欄
+# 検索UI
 # =========================
 
 st.subheader("🔍 検索条件")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    title_input = st.text_input("題名で検索")
+    title_input = st.text_input("題名")
 
 with col2:
-    composer_input = st.text_input("作曲者で検索")
+    composer_input = st.text_input("作曲者")
 
 with col3:
-    part_input = st.selectbox(
-        "声部",
-        ["", "混声四部", "混声三部", "女声", "男声", "斉唱"]
-    )
+    part_input = st.selectbox("声部", [""] + PART_OPTIONS)
+
+with col4:
+    type_input = st.selectbox("区分", [""] + TYPE_OPTIONS)
 
 # =========================
 # 検索処理
@@ -104,37 +178,40 @@ if composer_input:
 
 if part_input:
     filtered_df = filtered_df[
-        filtered_df["part"].str.contains(part_input, case=False, na=False)
+        filtered_df["part"] == part_input
+    ]
+
+if type_input:
+    filtered_df = filtered_df[
+        filtered_df["type"] == type_input
     ]
 
 # =========================
-# 検索結果 & 編集画面
+# 検索結果表示
 # =========================
 
 st.subheader("📄 検索結果")
-
-st.write(f"🔎 {len(filtered_df)} 件の楽譜が見つかりました")
+st.write(f"🔎 {len(filtered_df)} 件")
 
 if filtered_df.empty:
     st.warning("該当する楽譜が見つかりませんでした。")
 else:
-    edited_df = st.data_editor(
-        filtered_df,
+    st.dataframe(
+        filtered_df.drop(columns=["code"]),
         use_container_width=True,
-        num_rows="dynamic",
         column_config={
             "url": st.column_config.LinkColumn(
                 "楽譜リンク",
                 display_text="開く"
-            ),
-            "part": st.column_config.SelectboxColumn(
-                "声部",
-                options=["混声四部", "混声三部", "女声", "男声", "斉唱"]
             )
         }
     )
 
-    if st.button("💾 編集内容を保存"):
-        save_data(edited_df)
-        st.success("保存しました")
-        st.rerun()
+# =========================
+# ファイル名エラー表示
+# =========================
+
+if error_files:
+    with st.expander("⚠ ファイル名ルールに合っていないPDF"):
+        for name in error_files:
+            st.write(f"- {name}")
