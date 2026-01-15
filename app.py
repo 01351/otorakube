@@ -27,7 +27,6 @@ Google Drive 上の楽譜PDFを
 # Google Drive 設定
 # =========================
 
-SERVICE_ACCOUNT_FILE = "service_account.json"
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 FOLDER_ID = "ここにフォルダIDを入れる"
 
@@ -107,10 +106,6 @@ def parse_filename(filename):
 
 @st.cache_data(show_spinner=False)
 def load_from_drive():
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES
-    )
     service = build("drive", "v3", credentials=credentials)
 
     results = service.files().list(
@@ -215,3 +210,17 @@ if error_files:
     with st.expander("⚠ ファイル名ルールに合っていないPDF"):
         for name in error_files:
             st.write(f"- {name}")
+
+
+
+
+
+from google.oauth2 import service_account
+import streamlit as st
+
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=SCOPES
+)
