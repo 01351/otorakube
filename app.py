@@ -124,42 +124,30 @@ st.subheader("🔍 検索条件")
 # 作曲者一覧（★除去済み）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
-col1, col2, col3, col4 = st.columns([2, 2, 4, 4])
+# UI配置：題名、作曲者、声部、区分
+title_input = st.text_input("題名（部分一致）")
+composer_input = st.selectbox(
+    "作曲者",
+    ["指定しない"] + composer_list
+)
 
-with col1:
-    title_input = st.text_input("題名（部分一致）")
+# 横一列チェックボックスを作る関数
+def horizontal_checkboxes(options, key_prefix):
+    selected_options = []
+    cols = st.columns(len(options))
+    for i, opt in enumerate(options):
+        checked = st.session_state.get(f"{key_prefix}_{opt}", True)
+        if cols[i].checkbox(opt, value=checked, key=f"{key_prefix}_{opt}"):
+            selected_options.append(opt)
+    return selected_options
 
-with col2:
-    composer_input = st.selectbox(
-        "作曲者",
-        ["指定しない"] + composer_list
-    )
-
-# 声部チェックボックス横一列
-existing_parts = []
-for part in PART_ORDER:
-    if any(df["part"].str.startswith(part)):
-        existing_parts.append(part)
-
-part_inputs = []
-with col3:
-    part_cols = st.columns(len(existing_parts))
-    for i, part in enumerate(existing_parts):
-        checked = st.session_state.get(f"part_{part}", True)
-        selected = part_cols[i].checkbox(part, value=checked, key=f"part_{part}")
-        if selected:
-            part_inputs.append(part)
-
-# 区分チェックボックス横一列
+# 既存の声部・区分をDrive準拠で取得
+existing_parts = [p for p in PART_ORDER if any(df["part"].str.startswith(p))]
 existing_types = sorted(df["type"].dropna().unique().tolist())
-type_inputs = []
-with col4:
-    type_cols = st.columns(len(existing_types))
-    for i, t in enumerate(existing_types):
-        checked = st.session_state.get(f"type_{t}", True)
-        selected = type_cols[i].checkbox(t, value=checked, key=f"type_{t}")
-        if selected:
-            type_inputs.append(t)
+
+# 横一列チェックボックス
+part_inputs = horizontal_checkboxes(existing_parts, "part")
+type_inputs = horizontal_checkboxes(existing_types, "type")
 
 # =========================
 # 検索処理
