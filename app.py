@@ -98,24 +98,35 @@ title_input = st.text_input("題名（部分一致）", placeholder="")
 # 作曲者
 composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 声部（複数選択可・横並び）
+# 声部（複数選択可・横並び） 全チェック初期表示
 st.write("声部（複数選択可）")
 cols_per_row = 4
-part_inputs = []
+part_inputs = part_list.copy()  # 全部チェック
 for i in range(0, len(part_list), cols_per_row):
     cols = st.columns(cols_per_row)
     for j, part_name in enumerate(part_list[i:i+cols_per_row]):
-        if cols[j].checkbox(part_name):
-            part_inputs.append(part_name)
+        # 初期状態でTrueにする
+        checked = part_name in part_inputs
+        if cols[j].checkbox(part_name, value=checked):
+            if part_name not in part_inputs:
+                part_inputs.append(part_name)
+        else:
+            if part_name in part_inputs:
+                part_inputs.remove(part_name)
 
-# 区分（複数選択可・横並び）
+# 区分（複数選択可・横並び） 全チェック初期表示
 st.write("区分（複数選択可）")
-type_inputs = []
+type_inputs = type_list.copy()  # 全部チェック
 for i in range(0, len(type_list), cols_per_row):
     cols = st.columns(cols_per_row)
     for j, type_name in enumerate(type_list[i:i+cols_per_row]):
-        if cols[j].checkbox(type_name):
-            type_inputs.append(type_name)
+        checked = type_name in type_inputs
+        if cols[j].checkbox(type_name, value=checked):
+            if type_name not in type_inputs:
+                type_inputs.append(type_name)
+        else:
+            if type_name in type_inputs:
+                type_inputs.remove(type_name)
 
 # =========================
 # 検索処理
