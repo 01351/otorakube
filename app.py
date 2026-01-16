@@ -50,7 +50,7 @@ NUM_MAP = {
     "4": "四部"
 }
 
-PART_ORDER = ["混声", "女声", "男声", "斉唱"]  # 表示順
+PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
 # =========================
 # ファイル名解析
@@ -131,20 +131,23 @@ title_input = st.text_input("題名（部分一致）")
 
 composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 横一列チェックボックス
+# 横一列チェックボックス（声部）
 st.markdown("**声部**")
-part_cols = st.columns(len(existing_parts))
 part_inputs = []
-for i, p in enumerate(existing_parts):
-    if part_cols[i].checkbox(p, value=True, key=f"part_{p}"):
-        part_inputs.append(p)
+if existing_parts:
+    part_cols = st.columns(len(existing_parts))
+    for i, p in enumerate(existing_parts):
+        if part_cols[i].checkbox(p, value=True, key=f"part_{p}"):
+            part_inputs.append(p)
 
+# 横一列チェックボックス（区分）
 st.markdown("**区分**")
-type_cols = st.columns(len(existing_types))
 type_inputs = []
-for i, t in enumerate(existing_types):
-    if type_cols[i].checkbox(t, value=True, key=f"type_{t}"):
-        type_inputs.append(t)
+if existing_types:
+    type_cols = st.columns(len(existing_types))
+    for i, t in enumerate(existing_types):
+        if type_cols[i].checkbox(t, value=True, key=f"type_{t}"):
+            type_inputs.append(t)
 
 # =========================
 # 検索処理
