@@ -27,7 +27,6 @@ Google Drive 上の楽譜PDFを
 # =========================
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# DriveフォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -84,9 +83,8 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 読み込み
+# Google Drive 読み込み（リアルタイム版）
 # =========================
-@st.cache_data(show_spinner=False)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
@@ -116,6 +114,7 @@ def load_from_drive():
 
     return df, errors
 
+# 毎回Driveから取得することでリアルタイム反映
 df, error_files = load_from_drive()
 
 # =========================
@@ -139,7 +138,7 @@ composer_input = st.selectbox(
     options=["指定しない"] + composer_list
 )
 
-# 声部はチェックボックス横一列表示
+# 声部はチェックボックス横一列表示（初期全選択）
 st.write("声部")
 cols = st.columns(len(part_list))
 part_input = []
@@ -147,7 +146,7 @@ for i, part in enumerate(part_list):
     if cols[i].checkbox(part, value=True):
         part_input.append(part)
 
-# 区分もチェックボックス横一列表示
+# 区分もチェックボックス横一列表示（初期全選択）
 st.write("区分")
 cols = st.columns(len(type_list))
 type_input = []
