@@ -72,7 +72,11 @@ TYPE_OPTIONS = list(TYPE_MAP.values())
 def normalize_composer(name):
     if not isinstance(name, str):
         return ""
-    return name.replace("★", "").strip()
+
+# ★ ☆ ＊ * ※ をすべて除去
+    name = re.sub(r"[★☆＊*※]", "", name)
+
+    return name.strip()
 
 # =========================
 # ファイル名解析
