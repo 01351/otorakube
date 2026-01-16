@@ -120,7 +120,7 @@ def parse_filename(filename):
 # Google Drive 読み込み
 # =========================
 
-@st.cache_data(show_spinner=False)
+#@st.cache_data(show_spinner=False)
 def load_from_drive():
 
 df, error_files = load_from_drive()
