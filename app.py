@@ -30,7 +30,7 @@ Google Drive 上の楽譜PDFを
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # 🔽 Google Drive フォルダID
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+FOLDER_ID = "ここにあなたのフォルダID"
 
 # =========================
 # 定義マップ
@@ -55,17 +55,6 @@ NUM_MAP = {
     "3": "三部",
     "4": "四部"
 }
-
-# 🔽 使用する声部のみ
-PART_OPTIONS = [
-    "混声三部",
-    "混声四部",
-    "女声三部",
-    "男声四部",
-    "斉唱"
-]
-
-TYPE_OPTIONS = list(TYPE_MAP.values())
 
 # =========================
 # ファイル名解析
@@ -98,12 +87,8 @@ def parse_filename(filename):
     else:
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
-    # 🔽 使用しない声部は除外
-    if part not in PART_OPTIONS:
-        return None
-
     return {
-        "code": code,
+        "code": code,   # 並び順用（非表示）
         "title": title.strip(),
         "composer": composer,
         "part": part,
@@ -148,14 +133,20 @@ def load_from_drive():
 df, error_files = load_from_drive()
 
 # =========================
-# 検索UI
+# 動的選択肢（Drive依存）
+# =========================
+
+composer_options = sorted(df["composer"].dropna().unique().tolist())
+part_options = sorted(df["part"].dropna().unique().tolist())
+type_options = sorted(df["type"].dropna().unique().tolist())
+
+# =========================
+# 検索UI（キーボード非表示）
 # =========================
 
 st.subheader("🔍 検索条件")
 
-composer_list = sorted(df["composer"].dropna().unique().tolist())
-
-col1, col2 = st.columns(2)
+col1, col2, col3, col4 = st.columns([3, 2, 3, 2])
 
 with col1:
     title_input = st.text_input("題名（部分一致）")
@@ -163,26 +154,22 @@ with col1:
 with col2:
     composer_input = st.selectbox(
         "作曲者",
-        ["指定しない"] + composer_list
+        ["指定しない"] + composer_options
     )
 
-st.subheader("声部")
+with col3:
+    part_input = st.radio(
+        "声部",
+        ["指定しない"] + part_options,
+        horizontal=True
+    )
 
-part_input = st.radio(
-    "声部",
-    ["指定しない"] + PART_OPTIONS,
-    horizontal=True,
-    label_visibility="collapsed"
-)
-
-st.subheader("区分")
-
-type_input = st.radio(
-    "区分",
-    ["指定しない"] + TYPE_OPTIONS,
-    horizontal=True,
-    label_visibility="collapsed"
-)
+with col4:
+    type_input = st.radio(
+        "区分",
+        ["指定しない"] + type_options,
+        horizontal=True
+    )
 
 # =========================
 # 検索処理
