@@ -8,52 +8,81 @@ from googleapiclient.discovery import build
 # 基本設定
 # =========================
 st.set_page_config(
-    page_title="楽譜管理アプリ（Google Drive連携）",
+    page_title="楽譜管理アプリ（Google Drive）",
     layout="wide"
 )
 
 st.title("🎼 楽譜管理アプリ（Google Drive連携）")
+
 st.write("""
 Google Drive 上の楽譜PDFを  
 **題名・作曲者・声部・区分**で検索できます。
 
 📁 ファイル名形式  
-`00題名-XYZ作曲者.pdf`  
-※ U（斉唱）の場合は数字がなくても自動で「斉唱」と表示
+`00題名-XYZ作曲者.pdf`
 """)
 
 # =========================
 # Google Drive 設定
 # =========================
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+# DriveフォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
 # =========================
-TYPE_MAP = {"A": "オリジナル（伴奏有）", "B": "オリジナル（無伴奏）", "C": "アレンジ", "D": "特殊"}
-PART_BASE_MAP = {"G": "混声", "F": "女声", "M": "男声", "U": "斉唱"}
-NUM_MAP = {"2": "二部", "3": "三部", "4": "四部"}
+TYPE_MAP = {
+    "A": "オリジナル（伴奏有）",
+    "B": "オリジナル（無伴奏）",
+    "C": "アレンジ",
+    "D": "特殊"
+}
+
+PART_BASE_MAP = {
+    "G": "混声",
+    "F": "女声",
+    "M": "男声",
+    "U": "斉唱"
+}
+
+NUM_MAP = {
+    "2": "二部",
+    "3": "三部",
+    "4": "四部"
+}
 
 # =========================
 # ファイル名解析
 # =========================
 def parse_filename(filename):
-    # U(斉唱)は数字なしのパターンにも対応
+    """
+    新ルール: U(斉唱)は数字がなくてもOK、一律斉唱
+    例: 11AveMaria-AG4Bach★.pdf
+    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     match = re.match(pattern, filename)
     if not match:
         return None
+
     code, title, x, y, z, composer = match.groups()
-    composer = composer.replace("★", "").strip()  # ★除去
-    work_type = TYPE_MAP[x]
-    
-    if y == "U":  # 斉唱は数字無視
+    composer = composer.replace("★", "").strip()  # ★を除去
+    work_type = TYPE_MAP.get(x, "不明")
+
+    if y == "U":
         part = "斉唱"
     else:
-        part = f"{PART_BASE_MAP[y]}{NUM_MAP.get(z, '')}"
+        part_number = NUM_MAP.get(z, "")
+        part = f"{PART_BASE_MAP.get(y, '')}{part_number}"
 
-    return {"code": code, "title": title.strip(), "composer": composer, "part": part, "type": work_type}
+    return {
+        "code": code,
+        "title": title.strip(),
+        "composer": composer,
+        "part": part,
+        "type": work_type
+    }
 
 # =========================
 # Google Drive 読み込み
@@ -61,31 +90,32 @@ def parse_filename(filename):
 @st.cache_data(show_spinner=False)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=SCOPES
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
     )
+
     service = build("drive", "v3", credentials=credentials)
+
     results = service.files().list(
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(name, webViewLink)"
     ).execute()
-    rows, errors = [], []
+
+    rows = []
+    errors = []
+
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
             rows.append({**parsed, "url": f["webViewLink"]})
         else:
             errors.append(f["name"])
+
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values("code")
-    return df, errors
 
-# =========================
-# 更新ボタン
-# =========================
-if st.button("🔄 Driveを再読み込み"):
-    st.cache_data.clear()
-    st.experimental_rerun()
+    return df, errors
 
 df, error_files = load_from_drive()
 
@@ -94,58 +124,63 @@ df, error_files = load_from_drive()
 # =========================
 st.subheader("🔍 検索条件")
 
-# 作曲者、声部、区分のユニークリスト
+# 作曲者一覧（★除去済み・ユニーク）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
+
+# 声部・区分一覧はデータに存在するもののみ
 part_list = sorted(df["part"].dropna().unique().tolist())
 type_list = sorted(df["type"].dropna().unique().tolist())
 
-# 題名
-title_input = st.text_input("題名（部分一致）", placeholder="")
+col1, col2, col3, col4 = st.columns([2,2,3,3])
 
-# 作曲者
-composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
+with col1:
+    title_input = st.text_input("題名（部分一致）")
 
-# 声部（複数選択可・横並び） 全チェック初期表示
-st.write("声部（複数選択可）")
-cols_per_row = 4
-part_inputs = part_list.copy()  # 全部チェック
-for i in range(0, len(part_list), cols_per_row):
-    cols = st.columns(cols_per_row)
-    for j, part_name in enumerate(part_list[i:i+cols_per_row]):
-        checked = part_name in part_inputs
-        if cols[j].checkbox(part_name, value=checked):
-            if part_name not in part_inputs:
-                part_inputs.append(part_name)
-        else:
-            if part_name in part_inputs:
-                part_inputs.remove(part_name)
+with col2:
+    composer_input = st.multiselect(
+        "作曲者",
+        options=composer_list,
+        default=composer_list
+    )
 
-# 区分（複数選択可・横並び） 全チェック初期表示
-st.write("区分（複数選択可）")
-type_inputs = type_list.copy()  # 全部チェック
-for i in range(0, len(type_list), cols_per_row):
-    cols = st.columns(cols_per_row)
-    for j, type_name in enumerate(type_list[i:i+cols_per_row]):
-        checked = type_name in type_inputs
-        if cols[j].checkbox(type_name, value=checked):
-            if type_name not in type_inputs:
-                type_inputs.append(type_name)
-        else:
-            if type_name in type_inputs:
-                type_inputs.remove(type_name)
+with col3:
+    part_input = st.multiselect(
+        "声部",
+        options=part_list,
+        default=part_list
+    )
+
+with col4:
+    type_input = st.multiselect(
+        "区分",
+        options=type_list,
+        default=type_list
+    )
 
 # =========================
 # 検索処理
 # =========================
 filtered_df = df.copy()
+
 if title_input:
-    filtered_df = filtered_df[filtered_df["title"].str.contains(title_input, case=False, na=False)]
-if composer_input != "指定しない":
-    filtered_df = filtered_df[filtered_df["composer"] == composer_input]
-if part_inputs:
-    filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
-if type_inputs:
-    filtered_df = filtered_df[filtered_df["type"].isin(type_inputs)]
+    filtered_df = filtered_df[
+        filtered_df["title"].str.contains(title_input, case=False, na=False)
+    ]
+
+if composer_input:
+    filtered_df = filtered_df[
+        filtered_df["composer"].isin(composer_input)
+    ]
+
+if part_input:
+    filtered_df = filtered_df[
+        filtered_df["part"].isin(part_input)
+    ]
+
+if type_input:
+    filtered_df = filtered_df[
+        filtered_df["type"].isin(type_input)
+    ]
 
 # =========================
 # 検索結果表示
@@ -159,7 +194,12 @@ else:
     st.dataframe(
         filtered_df.drop(columns=["code"]),
         use_container_width=True,
-        column_config={"url": st.column_config.LinkColumn("楽譜リンク", display_text="開く")}
+        column_config={
+            "url": st.column_config.LinkColumn(
+                "楽譜リンク",
+                display_text="開く"
+            )
+        }
     )
 
 # =========================
