@@ -1,5 +1,5 @@
 import streamlit as st
-st.cache_data.clear()
+# st.cache_data.clear() を入れたら★消えた
 import pandas as pd
 import re
 from google.oauth2 import service_account
