@@ -57,10 +57,6 @@ PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 # ファイル名解析
 # =========================
 def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG4Bach★.pdf
-    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     match = re.match(pattern, filename)
 
@@ -68,11 +64,8 @@ def parse_filename(filename):
         return None
 
     code, title, x, y, z, composer = match.groups()
-
-    # ★除去
     composer = composer.replace("★", "").strip()
 
-    # 斉唱は数字なし
     if y == "U":
         part = "斉唱"
     else:
@@ -116,7 +109,6 @@ def load_from_drive():
             errors.append(f["name"])
 
     df = pd.DataFrame(rows)
-
     if not df.empty:
         df = df.sort_values("code")
 
@@ -132,7 +124,7 @@ st.subheader("🔍 検索条件")
 # 作曲者一覧（★除去済み）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
-col1, col2, col3, col4 = st.columns([2, 2, 3, 3])
+col1, col2, col3, col4 = st.columns([2, 2, 4, 4])
 
 with col1:
     title_input = st.text_input("題名（部分一致）")
@@ -149,7 +141,67 @@ for part in PART_ORDER:
     if any(df["part"].str.startswith(part)):
         existing_parts.append(part)
 
+part_inputs = []
 with col3:
     part_cols = st.columns(len(existing_parts))
-    part_inputs = []
-    for i, part in enumerate(existing_parts
+    for i, part in enumerate(existing_parts):
+        checked = st.session_state.get(f"part_{part}", True)
+        selected = part_cols[i].checkbox(part, value=checked, key=f"part_{part}")
+        if selected:
+            part_inputs.append(part)
+
+# 区分チェックボックス横一列
+existing_types = sorted(df["type"].dropna().unique().tolist())
+type_inputs = []
+with col4:
+    type_cols = st.columns(len(existing_types))
+    for i, t in enumerate(existing_types):
+        checked = st.session_state.get(f"type_{t}", True)
+        selected = type_cols[i].checkbox(t, value=checked, key=f"type_{t}")
+        if selected:
+            type_inputs.append(t)
+
+# =========================
+# 検索処理
+# =========================
+filtered_df = df.copy()
+
+if title_input:
+    filtered_df = filtered_df[
+        filtered_df["title"].str.contains(title_input, case=False, na=False)
+    ]
+
+if composer_input != "指定しない":
+    filtered_df = filtered_df[filtered_df["composer"] == composer_input]
+
+if part_inputs:
+    filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
+
+if type_inputs:
+    filtered_df = filtered_df[filtered_df["type"].isin(type_inputs)]
+
+# =========================
+# 検索結果表示
+# =========================
+st.subheader("📄 検索結果")
+if filtered_df.empty:
+    st.warning("該当する楽譜が見つかりませんでした。")
+else:
+    st.dataframe(
+        filtered_df.drop(columns=["code"]),
+        use_container_width=True,
+        column_config={
+            "url": st.column_config.LinkColumn(
+                "楽譜リンク",
+                display_text="開く"
+            )
+        }
+    )
+
+# =========================
+# ファイル名エラー表示
+# =========================
+if error_files:
+    with st.expander("⚠ ファイル名ルールに合っていないPDF"):
+        for name in error_files:
+            st.write(f"- {name}")
