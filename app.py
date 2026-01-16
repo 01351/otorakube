@@ -1,4 +1,8 @@
 import streamlit as st
+
+st.write(type(st.secrets["gcp_service_account"]["private_key"]))
+st.write(st.secrets["gcp_service_account"]["private_key"][:40])
+
 import pandas as pd
 import re
 from google.oauth2 import service_account
