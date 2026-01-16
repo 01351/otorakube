@@ -29,8 +29,8 @@ Google Drive 上の楽譜PDFを
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# 🔽 自分の Google Drive フォルダID
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+# 🔽 Google Drive のフォルダID
+FOLDER_ID = "ここにGoogleDriveフォルダID"
 
 # =========================
 # 定義マップ
@@ -66,26 +66,13 @@ PART_OPTIONS = [
 TYPE_OPTIONS = list(TYPE_MAP.values())
 
 # =========================
-# 作曲者名正規化（★を無視）
-# =========================
-
-def normalize_composer(name):
-    if not isinstance(name, str):
-        return ""
-
-# ★ ☆ ＊ * ※ をすべて除去
-    name = re.sub(r"[★☆＊*※]", "", name)
-
-    return name.strip()
-
-# =========================
 # ファイル名解析
 # =========================
 
 def parse_filename(filename):
     """
     例:
-    11AveMaria-AG4Bach.pdf
+    11AveMaria-AG4Bach★.pdf
     """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
@@ -95,7 +82,10 @@ def parse_filename(filename):
 
     code, title, x, y, z, composer = match.groups()
 
-    # 混声二部は存在しない
+    # ★を無視
+    composer = composer.replace("★", "").strip()
+
+    # 混声二部は除外
     if y == "G" and z == "2":
         return None
 
@@ -106,12 +96,10 @@ def parse_filename(filename):
     else:
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
-    composer_clean = normalize_composer(composer)
-
     return {
-        "code": code,                 # 並び順専用（非表示）
+        "code": code,        # 並び順用（非表示）
         "title": title.strip(),
-        "composer": composer_clean,   # ★除去後
+        "composer": composer,
         "part": part,
         "type": work_type
     }
@@ -120,7 +108,7 @@ def parse_filename(filename):
 # Google Drive 読み込み
 # =========================
 
-#@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
@@ -150,7 +138,6 @@ def load_from_drive():
         df = df.sort_values("code")
 
     return df, errors
-
 
 df, error_files = load_from_drive()
 
@@ -211,6 +198,27 @@ if type_input:
     filtered_df = filtered_df[
         filtered_df["type"] == type_input
     ]
+
+# =========================
+# PDFプレビュー
+# =========================
+
+st.subheader("👁 PDFプレビュー")
+
+preview_target = st.selectbox(
+    "プレビューする楽譜を選択",
+    [""] + filtered_df["title"].tolist()
+)
+
+if preview_target:
+    target_row = filtered_df[filtered_df["title"] == preview_target].iloc[0]
+    pdf_url = target_row["url"]
+
+    st.components.v1.iframe(
+        pdf_url,
+        width=900,
+        height=600
+    )
 
 # =========================
 # 検索結果表示
