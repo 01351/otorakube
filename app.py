@@ -105,12 +105,44 @@ def parse_filename(filename):
 
 @st.cache_data(show_spinner=False)
 def load_from_drive():
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+
+    SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+    credentials = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
+    )
+
     service = build("drive", "v3", credentials=credentials)
 
     results = service.files().list(
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(name, webViewLink)"
     ).execute()
+
+    @st.cache_data
+def load_from_drive():
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+
+    SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+    credentials = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
+    )
+
+    service = build("drive", "v3", credentials=credentials)
+
+    # ↓ ここから先は Drive の処理
+    files = service.files().list(
+        q=f"'{FOLDER_ID}' in parents and mimeType='application/pdf'",
+        fields="files(id, name, webViewLink)"
+    ).execute()
+
+    return files
 
     rows = []
     errors = []
@@ -210,16 +242,3 @@ if error_files:
         for name in error_files:
             st.write(f"- {name}")
 
-
-
-
-
-from google.oauth2 import service_account
-import streamlit as st
-
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=SCOPES
-)
