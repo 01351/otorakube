@@ -29,7 +29,7 @@ Google Drive 上の楽譜PDFを
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# 🔽 Google Drive フォルダID
+# 🔽 固定 Drive フォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -73,7 +73,6 @@ def parse_filename(filename):
 
     code, title, x, y, z, composer = match.groups()
 
-    # ★を除去
     composer = composer.replace("★", "").strip()
 
     # 混声二部は除外
@@ -88,7 +87,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,   # 並び順用（非表示）
+        "code": code,
         "title": title.strip(),
         "composer": composer,
         "part": part,
@@ -141,12 +140,12 @@ part_options = sorted(df["part"].dropna().unique().tolist())
 type_options = sorted(df["type"].dropna().unique().tolist())
 
 # =========================
-# 検索UI（キーボード非表示）
+# 検索UI
 # =========================
 
 st.subheader("🔍 検索条件")
 
-col1, col2, col3, col4 = st.columns([3, 2, 3, 2])
+col1, col2 = st.columns([3, 2])
 
 with col1:
     title_input = st.text_input("題名（部分一致）")
@@ -157,19 +156,21 @@ with col2:
         ["指定しない"] + composer_options
     )
 
-with col3:
-    part_input = st.radio(
-        "声部",
-        ["指定しない"] + part_options,
-        horizontal=True
-    )
+st.markdown("---")
 
-with col4:
-    type_input = st.radio(
-        "区分",
-        ["指定しない"] + type_options,
-        horizontal=True
-    )
+st.markdown("### 声部")
+part_input = st.radio(
+    label="",
+    options=["指定しない"] + part_options,
+    horizontal=True
+)
+
+st.markdown("### 区分")
+type_input = st.radio(
+    label="",
+    options=["指定しない"] + type_options,
+    horizontal=True
+)
 
 # =========================
 # 検索処理
