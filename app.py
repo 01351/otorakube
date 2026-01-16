@@ -28,8 +28,6 @@ Google Drive 上の楽譜PDFを
 # =========================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-# 🔽 Google Drive のフォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -66,6 +64,15 @@ PART_OPTIONS = [
 TYPE_OPTIONS = list(TYPE_MAP.values())
 
 # =========================
+# 共通：作曲者正規化（★完全無視）
+# =========================
+
+def normalize_composer(name: str) -> str:
+    if not name:
+        return ""
+    return re.sub(r"[★☆]", "", name).strip()
+
+# =========================
 # ファイル名解析
 # =========================
 
@@ -82,14 +89,11 @@ def parse_filename(filename):
 
     code, title, x, y, z, composer = match.groups()
 
-    # ★を無視
-    composer = composer.replace("★", "").strip()
+    composer = normalize_composer(composer)
 
-    # 混声二部は除外
+    # 混声二部は存在しない
     if y == "G" and z == "2":
         return None
-
-    work_type = TYPE_MAP[x]
 
     if y == "U":
         part = "斉唱"
@@ -97,11 +101,11 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,        # 並び順用（非表示）
+        "code": code,
         "title": title.strip(),
         "composer": composer,
         "part": part,
-        "type": work_type
+        "type": TYPE_MAP[x]
     }
 
 # =========================
@@ -147,8 +151,9 @@ df, error_files = load_from_drive()
 
 st.subheader("🔍 検索条件")
 
-# 作曲者一覧（★除去後・ユニーク）
-composer_list = sorted(df["composer"].dropna().unique().tolist())
+composer_list = sorted(
+    df["composer"].dropna().map(normalize_composer).unique().tolist()
+)
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -186,7 +191,7 @@ if title_input:
 
 if composer_input:
     filtered_df = filtered_df[
-        filtered_df["composer"] == composer_input
+        filtered_df["composer"].map(normalize_composer) == composer_input
     ]
 
 if part_inputs:
@@ -211,17 +216,11 @@ preview_target = st.selectbox(
 )
 
 if preview_target:
-    target_row = filtered_df[filtered_df["title"] == preview_target].iloc[0]
-    pdf_url = target_row["url"]
-
-    st.components.v1.iframe(
-        pdf_url,
-        width=900,
-        height=600
-    )
+    row = filtered_df[filtered_df["title"] == preview_target].iloc[0]
+    st.components.v1.iframe(row["url"], width=900, height=600)
 
 # =========================
-# 検索結果表示
+# 検索結果
 # =========================
 
 st.subheader("📄 検索結果")
@@ -234,18 +233,15 @@ else:
         filtered_df.drop(columns=["code"]),
         use_container_width=True,
         column_config={
-            "url": st.column_config.LinkColumn(
-                "楽譜リンク",
-                display_text="開く"
-            )
+            "url": st.column_config.LinkColumn("楽譜リンク", display_text="開く")
         }
     )
 
 # =========================
-# ファイル名エラー表示
+# ファイル名エラー
 # =========================
 
 if error_files:
-    with st.expander("⚠ ファイル名ルールに合っていないPDF"):
-        for name in error_files:
-            st.write(f"- {name}")
+    with st.expander("⚠ ファイル名ルール外PDF"):
+        for n in error_files:
+            st.write(f"- {n}")
