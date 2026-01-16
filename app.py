@@ -7,7 +7,6 @@ from googleapiclient.discovery import build
 # =========================
 # 基本設定
 # =========================
-
 st.set_page_config(
     page_title="楽譜管理アプリ（Google Drive）",
     layout="wide"
@@ -26,15 +25,12 @@ Google Drive 上の楽譜PDFを
 # =========================
 # Google Drive 設定
 # =========================
-
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
 # =========================
-
 TYPE_MAP = {
     "A": "オリジナル（伴奏有）",
     "B": "オリジナル（無伴奏）",
@@ -58,29 +54,15 @@ NUM_MAP = {
 # =========================
 # ファイル名解析
 # =========================
-
 def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG2Bach★.pdf
-    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
-
     if not match:
         return None
-
     code, title, x, y, z, composer = match.groups()
-
-    composer = composer.replace("★", "").strip()
-
+    composer = composer.replace("★", "").strip()  # ★を削除
     work_type = TYPE_MAP[x]
-
-    if y == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
-
+    part = "斉唱" if y == "U" else f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
     return {
         "code": code,
         "title": title.strip(),
@@ -92,14 +74,12 @@ def parse_filename(filename):
 # =========================
 # Google Drive 読み込み
 # =========================
-
 @st.cache_data(show_spinner=False)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
     )
-
     service = build("drive", "v3", credentials=credentials)
 
     results = service.files().list(
@@ -107,9 +87,7 @@ def load_from_drive():
         fields="files(name, webViewLink)"
     ).execute()
 
-    rows = []
-    errors = []
-
+    rows, errors = [], []
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
@@ -118,59 +96,50 @@ def load_from_drive():
             errors.append(f["name"])
 
     df = pd.DataFrame(rows)
-
     if not df.empty:
         df = df.sort_values("code")
-
     return df, errors
+
+# =========================
+# 更新ボタン
+# =========================
+if st.button("🔄 Driveを再読み込み"):
+    st.cache_data.clear()
+    st.experimental_rerun()
 
 df, error_files = load_from_drive()
 
 # =========================
-# 動的選択肢（Drive依存）
-# =========================
-
-composer_options = sorted(df["composer"].dropna().unique().tolist())
-part_options = sorted(df["part"].dropna().unique().tolist())
-type_options = sorted(df["type"].dropna().unique().tolist())
-
-# =========================
 # 検索UI
 # =========================
-
 st.subheader("🔍 検索条件")
 
-col1, col2 = st.columns([3, 2])
+# 作曲者・声部・区分は存在するものだけ
+composer_list = sorted(df["composer"].dropna().unique().tolist())
+part_list = sorted(df["part"].dropna().unique().tolist())
+type_list = sorted(df["type"].dropna().unique().tolist())
+
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    title_input = st.text_input("題名（部分一致）")
+    title_input = st.text_input("題名（部分一致）", placeholder="")
 
 with col2:
-    composer_input = st.selectbox(
-        "作曲者",
-        ["指定しない"] + composer_options
+    composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
+
+with col3:
+    part_inputs = st.multiselect(
+        "声部（複数選択可）",
+        part_list,
+        default=[]
     )
 
-st.markdown("---")
-
-st.markdown("### 声部")
-part_input = st.radio(
-    label="",
-    options=["指定しない"] + part_options,
-    horizontal=True
-)
-
-st.markdown("### 区分")
-type_input = st.radio(
-    label="",
-    options=["指定しない"] + type_options,
-    horizontal=True
-)
+with col4:
+    type_input = st.selectbox("区分", ["指定しない"] + type_list)
 
 # =========================
 # 検索処理
 # =========================
-
 filtered_df = df.copy()
 
 if title_input:
@@ -179,24 +148,17 @@ if title_input:
     ]
 
 if composer_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["composer"] == composer_input
-    ]
+    filtered_df = filtered_df[filtered_df["composer"] == composer_input]
 
-if part_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["part"] == part_input
-    ]
+if part_inputs:
+    filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
 
 if type_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["type"] == type_input
-    ]
+    filtered_df = filtered_df[filtered_df["type"] == type_input]
 
 # =========================
 # 検索結果表示
 # =========================
-
 st.subheader("📄 検索結果")
 st.write(f"🔎 {len(filtered_df)} 件")
 
@@ -217,7 +179,6 @@ else:
 # =========================
 # ファイル名エラー表示
 # =========================
-
 if error_files:
     with st.expander("⚠ ファイル名ルールに合っていないPDF"):
         for name in error_files:
