@@ -29,7 +29,6 @@ Google Drive 上の楽譜PDFを
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# 🔽 固定 Drive フォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -63,7 +62,7 @@ NUM_MAP = {
 def parse_filename(filename):
     """
     例:
-    11AveMaria-AG4Bach★.pdf
+    11AveMaria-AG2Bach★.pdf
     """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
@@ -74,10 +73,6 @@ def parse_filename(filename):
     code, title, x, y, z, composer = match.groups()
 
     composer = composer.replace("★", "").strip()
-
-    # 混声二部は除外
-    if y == "G" and z == "2":
-        return None
 
     work_type = TYPE_MAP[x]
 
