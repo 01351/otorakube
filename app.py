@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 # 基本設定
 # =========================
 st.set_page_config(
-    page_title="楽譜管理アプリ（Google Drive）",
+    page_title="楽譜管理アプリ（Google Drive連携）",
     layout="wide"
 )
 
@@ -121,8 +121,10 @@ composer_list = sorted(df["composer"].dropna().unique().tolist())
 existing_parts = sorted(df["part"].dropna().unique().tolist())
 existing_types = sorted(df["type"].dropna().unique().tolist())
 
-# UI表示
-col1, col2, col3, col4 = st.columns(4)
+# =========================
+# 声部・区分チェックボックスUI（横一列）
+# =========================
+col1, col2, col3 = st.columns([2, 3, 3])
 
 with col1:
     title_input = st.text_input("題名（部分一致）")
@@ -131,18 +133,18 @@ with col2:
     composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
 with col3:
-    part_inputs = st.multiselect(
-        "声部（複数選択可）",
-        existing_parts,
-        default=existing_parts
-    )
+    # 声部チェックボックス
+    st.markdown("**声部**")
+    part_inputs = []
+    for p in existing_parts:
+        if st.checkbox(p, value=True, key=f"part_{p}"):
+            part_inputs.append(p)
 
-with col4:
-    type_inputs = st.multiselect(
-        "区分（複数選択可）",
-        existing_types,
-        default=existing_types
-    )
+    st.markdown("**区分**")
+    type_inputs = []
+    for t in existing_types:
+        if st.checkbox(t, value=True, key=f"type_{t}"):
+            type_inputs.append(t)
 
 # =========================
 # 検索処理
@@ -154,7 +156,7 @@ if title_input:
         filtered_df["title"].str.contains(title_input, case=False, na=False)
     ]
 
-if composer_input and composer_input != "指定しない":
+if composer_input != "指定しない":
     filtered_df = filtered_df[filtered_df["composer"] == composer_input]
 
 if part_inputs:
