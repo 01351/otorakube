@@ -121,30 +121,28 @@ composer_list = sorted(df["composer"].dropna().unique().tolist())
 existing_parts = sorted(df["part"].dropna().unique().tolist())
 existing_types = sorted(df["type"].dropna().unique().tolist())
 
-# =========================
-# 声部・区分チェックボックスUI（横一列）
-# =========================
-col1, col2, col3 = st.columns([2, 3, 3])
+# -------------------------
+# 横一列チェックボックス
+# -------------------------
+st.markdown("**声部**")
+part_cols = st.columns(len(existing_parts))
+part_inputs = []
+for i, p in enumerate(existing_parts):
+    if part_cols[i].checkbox(p, value=True, key=f"part_{p}"):
+        part_inputs.append(p)
 
-with col1:
-    title_input = st.text_input("題名（部分一致）")
+st.markdown("**区分**")
+type_cols = st.columns(len(existing_types))
+type_inputs = []
+for i, t in enumerate(existing_types):
+    if type_cols[i].checkbox(t, value=True, key=f"type_{t}"):
+        type_inputs.append(t)
 
-with col2:
-    composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
+# 作曲者プルダウン
+composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-with col3:
-    # 声部チェックボックス
-    st.markdown("**声部**")
-    part_inputs = []
-    for p in existing_parts:
-        if st.checkbox(p, value=True, key=f"part_{p}"):
-            part_inputs.append(p)
-
-    st.markdown("**区分**")
-    type_inputs = []
-    for t in existing_types:
-        if st.checkbox(t, value=True, key=f"type_{t}"):
-            type_inputs.append(t)
+# 題名入力
+title_input = st.text_input("題名（部分一致）")
 
 # =========================
 # 検索処理
