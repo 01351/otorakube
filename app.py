@@ -5,7 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 # =========================
-# ページ設定
+# 基本設定
 # =========================
 
 st.set_page_config(
@@ -20,7 +20,7 @@ Google Drive 上の楽譜PDFを
 **題名・作曲者・声部・区分**で検索できます。
 
 📁 ファイル名形式  
-`五十音コード題名-XYZ作曲者.pdf`
+`00題名-XYZ作曲者.pdf`
 """)
 
 # =========================
@@ -29,7 +29,7 @@ Google Drive 上の楽譜PDFを
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# 🔽 ここだけ自分のフォルダIDに変更
+# 🔽 ここだけ自分のものに変更
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -95,7 +95,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,
+        "code": code,               # 並び替え専用（非表示）
         "title": title.strip(),
         "composer": composer.strip(),
         "part": part,
@@ -139,10 +139,6 @@ def load_from_drive():
         df = df.sort_values("code")
 
     return df, errors
-
-# =========================
-# データ読み込み
-# =========================
 
 df, error_files = load_from_drive()
 
