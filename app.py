@@ -50,6 +50,8 @@ NUM_MAP = {
     "4": "四部"
 }
 
+PART_ORDER = ["混声", "女声", "男声", "斉唱"]  # 表示順
+
 # =========================
 # ファイル名解析
 # =========================
@@ -60,7 +62,7 @@ def parse_filename(filename):
         return None
 
     code, title, x, y, z, composer = match.groups()
-    composer = composer.replace("★", "").strip()  # ★を削除
+    composer = composer.replace("★", "").strip()  # ★削除
 
     work_type = TYPE_MAP[x]
     if y == "U":
@@ -118,7 +120,8 @@ st.subheader("🔍 検索条件")
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
 # 存在する声部・区分のみ
-existing_parts = sorted(df["part"].dropna().unique().tolist())
+existing_parts = sorted(df["part"].dropna().unique().tolist(),
+                        key=lambda x: PART_ORDER.index(re.sub(r"[234]", "", x)))
 existing_types = sorted(df["type"].dropna().unique().tolist())
 
 # -------------------------
@@ -176,7 +179,7 @@ else:
         column_config={
             "url": st.column_config.LinkColumn("楽譜リンク", display_text="開く")
         },
-        hide_index=True  # 行番号非表示
+        hide_index=True
     )
 
 # =========================
