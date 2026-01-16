@@ -124,7 +124,6 @@ st.subheader("🔍 検索条件")
 # 作曲者一覧（★除去済み）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
-# UI配置：題名、作曲者、声部、区分
 title_input = st.text_input("題名（部分一致）")
 composer_input = st.selectbox(
     "作曲者",
@@ -141,8 +140,15 @@ def horizontal_checkboxes(options, key_prefix):
             selected_options.append(opt)
     return selected_options
 
-# 既存の声部・区分をDrive準拠で取得
-existing_parts = [p for p in PART_ORDER if any(df["part"].str.startswith(p))]
+# Drive準拠の既存声部（数字付き）を取得
+existing_parts = df["part"].dropna().unique().tolist()
+# 並び順：混声→女声→男声→斉唱
+existing_parts = sorted(
+    existing_parts,
+    key=lambda x: (PART_ORDER.index(re.match(r"(混声|女声|男声|斉唱)", x).group()), x)
+)
+
+# Drive準拠の区分を取得
 existing_types = sorted(df["type"].dropna().unique().tolist())
 
 # 横一列チェックボックス
