@@ -29,7 +29,7 @@ Google Drive 上の楽譜PDFを
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-# 🔽 ここだけ自分のものに変更
+# 🔽 自分の Google Drive フォルダID
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -74,7 +74,6 @@ def parse_filename(filename):
     例:
     11AveMaria-AG4Bach.pdf
     """
-
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
 
@@ -95,7 +94,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,               # 並び替え専用（非表示）
+        "code": code,        # 並び順専用（非表示）
         "title": title.strip(),
         "composer": composer.strip(),
         "part": part,
@@ -126,10 +125,7 @@ def load_from_drive():
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
-            rows.append({
-                **parsed,
-                "url": f["webViewLink"]
-            })
+            rows.append({**parsed, "url": f["webViewLink"]})
         else:
             errors.append(f["name"])
 
@@ -148,19 +144,31 @@ df, error_files = load_from_drive()
 
 st.subheader("🔍 検索条件")
 
+# 作曲者一覧（ユニーク）
+composer_list = sorted(df["composer"].dropna().unique().tolist())
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    title_input = st.text_input("題名")
+    title_input = st.text_input("題名（部分一致）")
 
 with col2:
-    composer_input = st.text_input("作曲者")
+    composer_input = st.selectbox(
+        "作曲者",
+        [""] + composer_list
+    )
 
 with col3:
-    part_input = st.selectbox("声部", [""] + PART_OPTIONS)
+    part_inputs = st.multiselect(
+        "声部（複数選択可）",
+        PART_OPTIONS
+    )
 
 with col4:
-    type_input = st.selectbox("区分", [""] + TYPE_OPTIONS)
+    type_input = st.selectbox(
+        "区分",
+        [""] + TYPE_OPTIONS
+    )
 
 # =========================
 # 検索処理
@@ -175,12 +183,12 @@ if title_input:
 
 if composer_input:
     filtered_df = filtered_df[
-        filtered_df["composer"].str.contains(composer_input, case=False, na=False)
+        filtered_df["composer"] == composer_input
     ]
 
-if part_input:
+if part_inputs:
     filtered_df = filtered_df[
-        filtered_df["part"] == part_input
+        filtered_df["part"].isin(part_inputs)
     ]
 
 if type_input:
