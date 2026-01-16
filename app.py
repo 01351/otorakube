@@ -122,6 +122,35 @@ def parse_filename(filename):
 
 #@st.cache_data(show_spinner=False)
 def load_from_drive():
+    credentials = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
+    )
+
+    service = build("drive", "v3", credentials=credentials)
+
+    results = service.files().list(
+        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
+        fields="files(name, webViewLink)"
+    ).execute()
+
+    rows = []
+    errors = []
+
+    for f in results.get("files", []):
+        parsed = parse_filename(f["name"])
+        if parsed:
+            rows.append({**parsed, "url": f["webViewLink"]})
+        else:
+            errors.append(f["name"])
+
+    df = pd.DataFrame(rows)
+
+    if not df.empty:
+        df = df.sort_values("code")
+
+    return df, errors
+
 
 df, error_files = load_from_drive()
 
