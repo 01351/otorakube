@@ -175,14 +175,18 @@ if type_inputs:
     filtered_df = filtered_df[filtered_df["type"].isin(type_inputs)]
 
 # =========================
-# 検索結果表示
+# 検索結果表示（数字を削除）
 # =========================
 st.subheader("📄 検索結果")
 if filtered_df.empty:
     st.warning("該当する楽譜が見つかりませんでした。")
 else:
+    display_df = filtered_df.copy()
+    # 表示用に数字を削除
+    display_df["part"] = display_df["part"].str.replace(r"[234]", "", regex=True)
+
     st.dataframe(
-        filtered_df.drop(columns=["code"]),
+        display_df.drop(columns=["code"]),
         use_container_width=True,
         column_config={
             "url": st.column_config.LinkColumn(
