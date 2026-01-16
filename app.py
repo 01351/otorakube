@@ -1,10 +1,7 @@
 import streamlit as st
-
-st.write(type(st.secrets["gcp_service_account"]["private_key"]))
-st.write(st.secrets["gcp_service_account"]["private_key"][:40])
-
 import pandas as pd
 import re
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -32,6 +29,8 @@ Google Drive 上の楽譜PDFを
 # =========================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+# ★★★ ここだけ自分のフォルダIDに変更 ★★★
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -72,6 +71,11 @@ TYPE_OPTIONS = list(TYPE_MAP.values())
 # =========================
 
 def parse_filename(filename):
+    """
+    例:
+    11AveMaria-AG4Bach.pdf
+    """
+
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
 
@@ -92,7 +96,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,   # 並び順用（非表示）
+        "code": code,          # 並び替え専用（非表示）
         "title": title.strip(),
         "composer": composer.strip(),
         "part": part,
@@ -103,10 +107,10 @@ def parse_filename(filename):
 # Google Drive 読み込み
 # =========================
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        json.loads(st.secrets["GCP_SERVICE_ACCOUNT"]),
         scopes=SCOPES
     )
 
@@ -138,7 +142,7 @@ def load_from_drive():
     return df, errors
 
 # =========================
-# データ読み込み
+# データ取得
 # =========================
 
 df, error_files = load_from_drive()
@@ -180,14 +184,10 @@ if composer_input:
     ]
 
 if part_input:
-    filtered_df = filtered_df[
-        filtered_df["part"] == part_input
-    ]
+    filtered_df = filtered_df[filtered_df["part"] == part_input]
 
 if type_input:
-    filtered_df = filtered_df[
-        filtered_df["type"] == type_input
-    ]
+    filtered_df = filtered_df[filtered_df["type"] == type_input]
 
 # =========================
 # 検索結果表示
