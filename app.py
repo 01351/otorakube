@@ -1,5 +1,4 @@
 import streamlit as st
-# st.cache_data.clear() を入れたら★消えた
 import pandas as pd
 import re
 from google.oauth2 import service_account
@@ -92,7 +91,7 @@ def parse_filename(filename):
 
     composer = normalize_composer(composer)
 
-    # 混声二部は存在しない
+    # 混声二部は除外
     if y == "G" and z == "2":
         return None
 
@@ -102,7 +101,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,
+        "code": code,      # 並び順用（非表示）
         "title": title.strip(),
         "composer": composer,
         "part": part,
@@ -206,22 +205,7 @@ if type_input:
     ]
 
 # =========================
-# PDFプレビュー
-# =========================
-
-st.subheader("👁 PDFプレビュー")
-
-preview_target = st.selectbox(
-    "プレビューする楽譜を選択",
-    [""] + filtered_df["title"].tolist()
-)
-
-if preview_target:
-    row = filtered_df[filtered_df["title"] == preview_target].iloc[0]
-    st.components.v1.iframe(row["url"], width=900, height=600)
-
-# =========================
-# 検索結果
+# 検索結果表示
 # =========================
 
 st.subheader("📄 検索結果")
@@ -234,12 +218,15 @@ else:
         filtered_df.drop(columns=["code"]),
         use_container_width=True,
         column_config={
-            "url": st.column_config.LinkColumn("楽譜リンク", display_text="開く")
+            "url": st.column_config.LinkColumn(
+                "楽譜リンク",
+                display_text="開く"
+            )
         }
     )
 
 # =========================
-# ファイル名エラー
+# ファイル名エラー表示
 # =========================
 
 if error_files:
