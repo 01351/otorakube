@@ -18,7 +18,8 @@ Google Drive 上の楽譜PDFを
 **題名・作曲者・声部・区分**で検索できます。
 
 📁 ファイル名形式  
-`00題名-XYZ作曲者.pdf`
+`00題名-XYZ作曲者.pdf`  
+※ U（斉唱）の場合は数字がなくても自動で「斉唱」と表示
 """)
 
 # =========================
@@ -38,14 +39,20 @@ NUM_MAP = {"2": "二部", "3": "三部", "4": "四部"}
 # ファイル名解析
 # =========================
 def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
+    # U(斉唱)は数字なしのパターンにも対応
+    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     match = re.match(pattern, filename)
     if not match:
         return None
     code, title, x, y, z, composer = match.groups()
     composer = composer.replace("★", "").strip()  # ★除去
     work_type = TYPE_MAP[x]
-    part = "斉唱" if y == "U" else f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
+    
+    if y == "U":  # 斉唱は数字無視
+        part = "斉唱"
+    else:
+        part = f"{PART_BASE_MAP[y]}{NUM_MAP.get(z, '')}"
+
     return {"code": code, "title": title.strip(), "composer": composer, "part": part, "type": work_type}
 
 # =========================
@@ -105,7 +112,6 @@ part_inputs = part_list.copy()  # 全部チェック
 for i in range(0, len(part_list), cols_per_row):
     cols = st.columns(cols_per_row)
     for j, part_name in enumerate(part_list[i:i+cols_per_row]):
-        # 初期状態でTrueにする
         checked = part_name in part_inputs
         if cols[j].checkbox(part_name, value=checked):
             if part_name not in part_inputs:
