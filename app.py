@@ -30,7 +30,7 @@ Google Drive 上の楽譜PDFを
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # 🔽 Google Drive のフォルダID
-FOLDER_ID = "ここにGoogleDriveフォルダID"
+FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
