@@ -30,7 +30,7 @@ Google Drive 上の楽譜PDFを
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # 🔽 自分の Google Drive フォルダID
-FOLDER_ID = "ここにGoogleDriveフォルダID"
+FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
@@ -66,6 +66,15 @@ PART_OPTIONS = [
 TYPE_OPTIONS = list(TYPE_MAP.values())
 
 # =========================
+# 作曲者名正規化（★を無視）
+# =========================
+
+def normalize_composer(name):
+    if not isinstance(name, str):
+        return ""
+    return name.replace("★", "").strip()
+
+# =========================
 # ファイル名解析
 # =========================
 
@@ -93,10 +102,12 @@ def parse_filename(filename):
     else:
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
+    composer_clean = normalize_composer(composer)
+
     return {
-        "code": code,        # 並び順専用（非表示）
+        "code": code,                 # 並び順専用（非表示）
         "title": title.strip(),
-        "composer": composer.strip(),
+        "composer": composer_clean,   # ★除去後
         "part": part,
         "type": work_type
     }
@@ -144,7 +155,7 @@ df, error_files = load_from_drive()
 
 st.subheader("🔍 検索条件")
 
-# 作曲者一覧（ユニーク）
+# 作曲者一覧（★除去後・ユニーク）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
 col1, col2, col3, col4 = st.columns(4)
