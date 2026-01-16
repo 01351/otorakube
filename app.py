@@ -13,7 +13,6 @@ st.set_page_config(
 )
 
 st.title("🎼 楽譜管理アプリ（Google Drive連携）")
-
 st.write("""
 Google Drive 上の楽譜PDFを  
 **題名・作曲者・声部・区分**で検索できます。
@@ -26,7 +25,6 @@ Google Drive 上の楽譜PDFを
 # Google Drive 設定
 # =========================
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -56,23 +54,19 @@ NUM_MAP = {
 # ファイル名解析
 # =========================
 def parse_filename(filename):
-    """
-    U(斉唱)は数字無視、一律斉唱
-    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     match = re.match(pattern, filename)
     if not match:
         return None
 
     code, title, x, y, z, composer = match.groups()
-    composer = composer.replace("★", "").strip()
-    work_type = TYPE_MAP.get(x, "不明")
+    composer = composer.replace("★", "").strip()  # ★を削除
 
+    work_type = TYPE_MAP[x]
     if y == "U":
         part = "斉唱"
     else:
-        part_number = NUM_MAP.get(z, "")
-        part = f"{PART_BASE_MAP.get(y, '')}{part_number}"
+        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
         "code": code,
@@ -83,14 +77,13 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 読み込み（リアルタイム版）
+# Google Drive 読み込み（リアルタイム）
 # =========================
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
     )
-
     service = build("drive", "v3", credentials=credentials)
 
     results = service.files().list(
@@ -114,7 +107,6 @@ def load_from_drive():
 
     return df, errors
 
-# 毎回Driveから取得することでリアルタイム反映
 df, error_files = load_from_drive()
 
 # =========================
@@ -122,37 +114,35 @@ df, error_files = load_from_drive()
 # =========================
 st.subheader("🔍 検索条件")
 
-# 作曲者一覧（★除去済み・ユニーク）
+# 作曲者リスト
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
-# 声部・区分一覧はデータに存在するもののみ
-part_list = sorted(df["part"].dropna().unique().tolist())
-type_list = sorted(df["type"].dropna().unique().tolist())
+# 存在する声部・区分のみ
+existing_parts = sorted(df["part"].dropna().unique().tolist())
+existing_types = sorted(df["type"].dropna().unique().tolist())
 
-# ---- UI配置 ----
-title_input = st.text_input("題名（部分一致）")
+# UI表示
+col1, col2, col3, col4 = st.columns(4)
 
-# 作曲者はプルダウン（単一選択）
-composer_input = st.selectbox(
-    "作曲者",
-    options=["指定しない"] + composer_list
-)
+with col1:
+    title_input = st.text_input("題名（部分一致）")
 
-# 声部はチェックボックス横一列表示（初期全選択）
-st.write("声部")
-cols = st.columns(len(part_list))
-part_input = []
-for i, part in enumerate(part_list):
-    if cols[i].checkbox(part, value=True):
-        part_input.append(part)
+with col2:
+    composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 区分もチェックボックス横一列表示（初期全選択）
-st.write("区分")
-cols = st.columns(len(type_list))
-type_input = []
-for i, t in enumerate(type_list):
-    if cols[i].checkbox(t, value=True):
-        type_input.append(t)
+with col3:
+    part_inputs = st.multiselect(
+        "声部（複数選択可）",
+        existing_parts,
+        default=existing_parts
+    )
+
+with col4:
+    type_inputs = st.multiselect(
+        "区分（複数選択可）",
+        existing_types,
+        default=existing_types
+    )
 
 # =========================
 # 検索処理
@@ -165,25 +155,18 @@ if title_input:
     ]
 
 if composer_input and composer_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["composer"] == composer_input
-    ]
+    filtered_df = filtered_df[filtered_df["composer"] == composer_input]
 
-if part_input:
-    filtered_df = filtered_df[
-        filtered_df["part"].isin(part_input)
-    ]
+if part_inputs:
+    filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
 
-if type_input:
-    filtered_df = filtered_df[
-        filtered_df["type"].isin(type_input)
-    ]
+if type_inputs:
+    filtered_df = filtered_df[filtered_df["type"].isin(type_inputs)]
 
 # =========================
 # 検索結果表示
 # =========================
 st.subheader("📄 検索結果")
-st.write(f"🔎 {len(filtered_df)} 件")
 
 if filtered_df.empty:
     st.warning("該当する楽譜が見つかりませんでした。")
@@ -192,11 +175,9 @@ else:
         filtered_df.drop(columns=["code"]),
         use_container_width=True,
         column_config={
-            "url": st.column_config.LinkColumn(
-                "楽譜リンク",
-                display_text="開く"
-            )
-        }
+            "url": st.column_config.LinkColumn("楽譜リンク", display_text="開く")
+        },
+        hide_index=True  # 行番号非表示
     )
 
 # =========================
