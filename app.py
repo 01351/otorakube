@@ -92,15 +92,15 @@ composer_list = sorted(df["composer"].dropna().unique().tolist())
 part_list = sorted(df["part"].dropna().unique().tolist())
 type_list = sorted(df["type"].dropna().unique().tolist())
 
-# 1行目: 題名
+# 題名
 title_input = st.text_input("題名（部分一致）", placeholder="")
 
-# 2行目: 作曲者
+# 作曲者
 composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 3行目: 声部（横並び・改行あり）
+# 声部（複数選択可・横並び）
 st.write("声部（複数選択可）")
-cols_per_row = 4  # 横に4個ずつ表示
+cols_per_row = 4
 part_inputs = []
 for i in range(0, len(part_list), cols_per_row):
     cols = st.columns(cols_per_row)
@@ -108,15 +108,9 @@ for i in range(0, len(part_list), cols_per_row):
         if cols[j].checkbox(part_name):
             part_inputs.append(part_name)
 
-# 4行目: 区分（横並び・改行あり）
+# 区分（ラジオボタン・一行）
 st.write("区分")
-cols_per_row = 4
-type_input = None
-for i in range(0, len(type_list), cols_per_row):
-    cols = st.columns(cols_per_row)
-    for j, t_name in enumerate(type_list[i:i+cols_per_row]):
-        if cols[j].radio("区分選択", [t_name, "指定しない"]):
-            type_input = t_name
+type_input = st.radio("区分選択", ["指定しない"] + type_list, horizontal=True)
 
 # =========================
 # 検索処理
@@ -128,7 +122,7 @@ if composer_input != "指定しない":
     filtered_df = filtered_df[filtered_df["composer"] == composer_input]
 if part_inputs:
     filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
-if type_input and type_input != "指定しない":
+if type_input != "指定しない":
     filtered_df = filtered_df[filtered_df["type"] == type_input]
 
 # =========================
