@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -18,7 +19,7 @@ st.write("""
 Google Drive 上の楽譜PDFを  
 **題名・作曲者・声部・区分**で検索できます。
 
-📁 ファイル名形式（確定）  
+📁 ファイル名形式  
 `五十音コード題名-XYZ作曲者.pdf`
 """)
 
@@ -67,11 +68,6 @@ TYPE_OPTIONS = list(TYPE_MAP.values())
 # =========================
 
 def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG4Bach.pdf
-    """
-
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
 
@@ -92,7 +88,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,               # 並び順専用（非表示）
+        "code": code,   # 並び順用（非表示）
         "title": title.strip(),
         "composer": composer.strip(),
         "part": part,
@@ -105,11 +101,6 @@ def parse_filename(filename):
 
 @st.cache_data(show_spinner=False)
 def load_from_drive():
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-
-    SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
@@ -121,28 +112,6 @@ def load_from_drive():
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(name, webViewLink)"
     ).execute()
-
-    @st.cache_data
-def load_from_drive():
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-
-    SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=SCOPES
-    )
-
-    service = build("drive", "v3", credentials=credentials)
-
-    # ↓ ここから先は Drive の処理
-    files = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and mimeType='application/pdf'",
-        fields="files(id, name, webViewLink)"
-    ).execute()
-
-    return files
 
     rows = []
     errors = []
@@ -163,6 +132,10 @@ def load_from_drive():
         df = df.sort_values("code")
 
     return df, errors
+
+# =========================
+# データ読み込み
+# =========================
 
 df, error_files = load_from_drive()
 
@@ -241,4 +214,3 @@ if error_files:
     with st.expander("⚠ ファイル名ルールに合っていないPDF"):
         for name in error_files:
             st.write(f"- {name}")
-
