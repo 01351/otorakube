@@ -85,7 +85,7 @@ def parse_filename(filename):
     # ★を除去
     composer = composer.replace("★", "").strip()
 
-    # 混声二部は存在しない
+    # 混声二部は除外
     if y == "G" and z == "2":
         return None
 
@@ -97,7 +97,7 @@ def parse_filename(filename):
         part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,          # 並び順専用（非表示）
+        "code": code,
         "title": title.strip(),
         "composer": composer,
         "part": part,
@@ -147,7 +147,6 @@ df, error_files = load_from_drive()
 
 st.subheader("🔍 検索条件")
 
-# 作曲者一覧（★除去後）
 composer_list = sorted(df["composer"].dropna().unique().tolist())
 
 col1, col2 = st.columns(2)
@@ -158,14 +157,14 @@ with col1:
 with col2:
     composer_input = st.selectbox(
         "作曲者",
-        [""] + composer_list
+        ["指定しない"] + composer_list
     )
 
 st.subheader("声部")
 
 part_input = st.radio(
     "声部",
-    [""] + PART_OPTIONS,
+    ["指定しない"] + PART_OPTIONS,
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -174,7 +173,7 @@ st.subheader("区分")
 
 type_input = st.radio(
     "区分",
-    [""] + TYPE_OPTIONS,
+    ["指定しない"] + TYPE_OPTIONS,
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -190,17 +189,17 @@ if title_input:
         filtered_df["title"].str.contains(title_input, case=False, na=False)
     ]
 
-if composer_input:
+if composer_input != "指定しない":
     filtered_df = filtered_df[
         filtered_df["composer"] == composer_input
     ]
 
-if part_input:
+if part_input != "指定しない":
     filtered_df = filtered_df[
         filtered_df["part"] == part_input
     ]
 
-if type_input:
+if type_input != "指定しない":
     filtered_df = filtered_df[
         filtered_df["type"] == type_input
     ]
