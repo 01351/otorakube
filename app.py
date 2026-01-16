@@ -5,23 +5,18 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 # =========================
-# 基本設定
+# ページ設定
 # =========================
 
 st.set_page_config(
-    page_title="楽譜管理アプリ（Google Drive）",
+    page_title="楽譜管理アプリ",
     layout="wide"
 )
 
-st.title("🎼 楽譜管理アプリ（Google Drive連携）")
+st.title("🎼 楽譜管理アプリ")
+st.caption("Google Drive 上の楽譜PDFを、条件指定で素早く検索できます")
 
-st.write("""
-Google Drive 上の楽譜PDFを  
-**題名・作曲者・声部・区分**で検索できます。
-
-📁 ファイル名形式  
-`00題名-XYZ作曲者.pdf`
-""")
+st.divider()
 
 # =========================
 # Google Drive 設定
@@ -64,7 +59,7 @@ PART_OPTIONS = [
 TYPE_OPTIONS = list(TYPE_MAP.values())
 
 # =========================
-# 共通：作曲者正規化（★完全無視）
+# 共通：作曲者正規化（★無視）
 # =========================
 
 def normalize_composer(name: str) -> str:
@@ -77,31 +72,21 @@ def normalize_composer(name: str) -> str:
 # =========================
 
 def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG4Bach★.pdf
-    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
     match = re.match(pattern, filename)
-
     if not match:
         return None
 
     code, title, x, y, z, composer = match.groups()
-
     composer = normalize_composer(composer)
 
-    # 混声二部は除外
     if y == "G" and z == "2":
         return None
 
-    if y == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
+    part = "斉唱" if y == "U" else f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
 
     return {
-        "code": code,      # 並び順用（非表示）
+        "code": code,
         "title": title.strip(),
         "composer": composer,
         "part": part,
@@ -126,8 +111,7 @@ def load_from_drive():
         fields="files(name, webViewLink)"
     ).execute()
 
-    rows = []
-    errors = []
+    rows, errors = [], []
 
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
@@ -137,7 +121,6 @@ def load_from_drive():
             errors.append(f["name"])
 
     df = pd.DataFrame(rows)
-
     if not df.empty:
         df = df.sort_values("code")
 
@@ -146,37 +129,36 @@ def load_from_drive():
 df, error_files = load_from_drive()
 
 # =========================
-# 検索UI
+# 検索UI（カード風）
 # =========================
 
-st.subheader("🔍 検索条件")
+st.subheader("🔍 検索")
 
-composer_list = sorted(
-    df["composer"].dropna().map(normalize_composer).unique().tolist()
-)
+with st.container(border=True):
+    composer_list = sorted(df["composer"].dropna().unique().tolist())
 
-col1, col2, col3, col4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
 
-with col1:
-    title_input = st.text_input("題名（部分一致）")
+    with c1:
+        title_input = st.text_input("題名", placeholder="部分一致")
 
-with col2:
-    composer_input = st.selectbox(
-        "作曲者",
-        [""] + composer_list
-    )
+    with c2:
+        composer_input = st.selectbox(
+            "作曲者",
+            [""] + composer_list
+        )
 
-with col3:
-    part_inputs = st.multiselect(
-        "声部（複数選択可）",
-        PART_OPTIONS
-    )
+    with c3:
+        part_inputs = st.multiselect(
+            "声部",
+            PART_OPTIONS
+        )
 
-with col4:
-    type_input = st.selectbox(
-        "区分",
-        [""] + TYPE_OPTIONS
-    )
+    with c4:
+        type_input = st.selectbox(
+            "区分",
+            [""] + TYPE_OPTIONS
+        )
 
 # =========================
 # 検索処理
@@ -191,7 +173,7 @@ if title_input:
 
 if composer_input:
     filtered_df = filtered_df[
-        filtered_df["composer"].map(normalize_composer) == composer_input
+        filtered_df["composer"] == composer_input
     ]
 
 if part_inputs:
@@ -205,31 +187,32 @@ if type_input:
     ]
 
 # =========================
-# 検索結果表示
+# 検索結果
 # =========================
 
 st.subheader("📄 検索結果")
-st.write(f"🔎 {len(filtered_df)} 件")
+st.markdown(f"**▶ {len(filtered_df)} 件ヒット**")
 
 if filtered_df.empty:
-    st.warning("該当する楽譜が見つかりませんでした。")
+    st.info("条件に一致する楽譜はありません。")
 else:
     st.dataframe(
         filtered_df.drop(columns=["code"]),
         use_container_width=True,
+        height=520,
         column_config={
             "url": st.column_config.LinkColumn(
-                "楽譜リンク",
+                "楽譜PDF",
                 display_text="開く"
             )
         }
     )
 
 # =========================
-# ファイル名エラー表示
+# ファイル名エラー
 # =========================
 
 if error_files:
-    with st.expander("⚠ ファイル名ルール外PDF"):
-        for n in error_files:
-            st.write(f"- {n}")
+    with st.expander("⚠ ファイル名ルール外のPDF"):
+        for f in error_files:
+            st.write(f"- {f}")
