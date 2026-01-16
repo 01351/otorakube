@@ -1,220 +1,146 @@
 import streamlit as st
 import pandas as pd
-import re
-import json
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+import unicodedata
+import gspread
+from google.oauth2.service_account import Credentials
 
-# =========================
+# ======================
 # 基本設定
-# =========================
+# ======================
+st.set_page_config(page_title="合唱楽譜検索", layout="wide")
+st.title("🎶 合唱楽譜データベース")
 
-st.set_page_config(
-    page_title="楽譜管理アプリ（Google Drive）",
-    layout="wide"
-)
+# ======================
+# 定数
+# ======================
+PART_OPTIONS = ["混声四部", "女声三部", "男声四部", "児童合唱"]
 
-st.title("🎼 楽譜管理アプリ（Google Drive連携・CSV不要）")
+# ======================
+# 文字正規化（検索用）
+# ======================
+def normalize(text):
+    if pd.isna(text):
+        return ""
+    return unicodedata.normalize("NFKC", str(text)).lower()
 
-st.write("""
-Google Drive 上の楽譜PDFを  
-**題名・作曲者・声部・区分**で検索できます。
-
-📁 ファイル名形式  
-`五十音コード題名-XYZ作曲者.pdf`
-""")
-
-# =========================
-# Google Drive 設定
-# =========================
-
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-# ★★★ ここだけ自分のフォルダIDに変更 ★★★
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
-
-# =========================
-# 定義マップ
-# =========================
-
-TYPE_MAP = {
-    "A": "オリジナル（伴奏有）",
-    "B": "オリジナル（無伴奏）",
-    "C": "アレンジ",
-    "D": "特殊"
-}
-
-PART_BASE_MAP = {
-    "G": "混声",
-    "F": "女声",
-    "M": "男声",
-    "U": "斉唱"
-}
-
-NUM_MAP = {
-    "2": "二部",
-    "3": "三部",
-    "4": "四部"
-}
-
-PART_OPTIONS = [
-    "混声三部", "混声四部",
-    "女声二部", "女声三部", "女声四部",
-    "男声二部", "男声三部", "男声四部",
-    "斉唱"
-]
-
-TYPE_OPTIONS = list(TYPE_MAP.values())
-
-# =========================
-# ファイル名解析
-# =========================
-
-def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG4Bach.pdf
-    """
-
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234])(.+)\.pdf$"
-    match = re.match(pattern, filename)
-
-    if not match:
-        return None
-
-    code, title, x, y, z, composer = match.groups()
-
-    # 混声二部は存在しない
-    if y == "G" and z == "2":
-        return None
-
-    work_type = TYPE_MAP[x]
-
-    if y == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
-
-    return {
-        "code": code,          # 並び替え専用（非表示）
-        "title": title.strip(),
-        "composer": composer.strip(),
-        "part": part,
-        "type": work_type
-    }
-
-# =========================
-# Google Drive 読み込み
-# =========================
-
-@st.cache_data(show_spinner=True)
+# ======================
+# Google Drive / Sheets 読み込み
+# ======================
 def load_from_drive():
-    credentials = service_account.Credentials.from_service_account_info(
-        json.loads(st.secrets["GCP_SERVICE_ACCOUNT"]),
-        scopes=SCOPES
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+
+    credentials = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scopes,
     )
 
-    service = build("drive", "v3", credentials=credentials)
+    gc = gspread.authorize(credentials)
 
-    results = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
-    ).execute()
+    # ← あなたが Secrets に入れた FOLDERID
+    folder_id = st.secrets["1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"]
 
-    rows = []
-    errors = []
+    sh = gc.open_by_key(folder_id)
+    worksheet = sh.sheet1
+    data = worksheet.get_all_records()
 
-    for f in results.get("files", []):
-        parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({
-                **parsed,
-                "url": f["webViewLink"]
-            })
-        else:
-            errors.append(f["name"])
+    df = pd.DataFrame(data)
+    return df
 
-    df = pd.DataFrame(rows)
+# ======================
+# データ読み込み
+# ======================
+@st.cache_data
+def load_data():
+    return load_from_drive()
 
-    if not df.empty:
-        df = df.sort_values("code")
+df = load_data()
 
-    return df, errors
-
-# =========================
-# データ取得
-# =========================
-
-df, error_files = load_from_drive()
-
-# =========================
+# ======================
 # 検索UI
-# =========================
+# ======================
+st.subheader("🔍 検索")
 
-st.subheader("🔍 検索条件")
-
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    title_input = st.text_input("題名")
+    title_input = st.text_input("曲名")
 
 with col2:
     composer_input = st.text_input("作曲者")
 
 with col3:
-    part_input = st.selectbox("声部", [""] + PART_OPTIONS)
+    part_input = st.multiselect("声部", PART_OPTIONS)
 
-with col4:
-    type_input = st.selectbox("区分", [""] + TYPE_OPTIONS)
+# 並び替え
+sort_option = st.radio(
+    "並び替え",
+    ["五十音順", "題名順", "作曲者順"],
+    horizontal=True
+)
 
-# =========================
-# 検索処理
-# =========================
-
+# ======================
+# フィルタ処理
+# ======================
 filtered_df = df.copy()
 
 if title_input:
+    key = normalize(title_input)
     filtered_df = filtered_df[
-        filtered_df["title"].str.contains(title_input, case=False, na=False)
+        filtered_df["title"].apply(lambda x: key in normalize(x))
     ]
 
 if composer_input:
+    key = normalize(composer_input)
     filtered_df = filtered_df[
-        filtered_df["composer"].str.contains(composer_input, case=False, na=False)
+        filtered_df["composer"].apply(lambda x: key in normalize(x))
     ]
 
 if part_input:
-    filtered_df = filtered_df[filtered_df["part"] == part_input]
+    filtered_df = filtered_df[
+        filtered_df["part"].isin(part_input)
+    ]
 
-if type_input:
-    filtered_df = filtered_df[filtered_df["type"] == type_input]
+# 並び替え
+if not filtered_df.empty:
+    if sort_option == "五十音順":
+        filtered_df = filtered_df.sort_values("code")
+    elif sort_option == "題名順":
+        filtered_df = filtered_df.sort_values("title")
+    elif sort_option == "作曲者順":
+        filtered_df = filtered_df.sort_values("composer")
 
-# =========================
-# 検索結果表示
-# =========================
-
+# ======================
+# 結果表示
+# ======================
 st.subheader("📄 検索結果")
-st.write(f"🔎 {len(filtered_df)} 件")
 
 if filtered_df.empty:
-    st.warning("該当する楽譜が見つかりませんでした。")
+    st.info("該当する楽譜がありません")
 else:
     st.dataframe(
-        filtered_df.drop(columns=["code"]),
-        use_container_width=True,
-        column_config={
-            "url": st.column_config.LinkColumn(
-                "楽譜リンク",
-                display_text="開く"
-            )
-        }
+        filtered_df[["title", "composer", "part"]],
+        use_container_width=True
     )
 
-# =========================
-# ファイル名エラー表示
-# =========================
+# ======================
+# 楽譜プレビュー
+# ======================
+st.subheader("👀 楽譜プレビュー")
 
-if error_files:
-    with st.expander("⚠ ファイル名ルールに合っていないPDF"):
-        for name in error_files:
-            st.write(f"- {name}")
+if not filtered_df.empty:
+    selected_title = st.selectbox(
+        "プレビューする楽譜を選択",
+        filtered_df["title"]
+    )
+
+    selected_row = filtered_df[
+        filtered_df["title"] == selected_title
+    ].iloc[0]
+
+    st.components.v1.iframe(
+        selected_row["url"],
+        height=650
+    )
