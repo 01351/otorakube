@@ -58,8 +58,7 @@ NUM_MAP = {
 # =========================
 def parse_filename(filename):
     """
-    新ルール: U(斉唱)は数字がなくてもOK、一律斉唱
-    例: 11AveMaria-AG4Bach★.pdf
+    U(斉唱)は数字無視、一律斉唱
     """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     match = re.match(pattern, filename)
@@ -67,7 +66,7 @@ def parse_filename(filename):
         return None
 
     code, title, x, y, z, composer = match.groups()
-    composer = composer.replace("★", "").strip()  # ★を除去
+    composer = composer.replace("★", "").strip()
     work_type = TYPE_MAP.get(x, "不明")
 
     if y == "U":
@@ -131,31 +130,30 @@ composer_list = sorted(df["composer"].dropna().unique().tolist())
 part_list = sorted(df["part"].dropna().unique().tolist())
 type_list = sorted(df["type"].dropna().unique().tolist())
 
-col1, col2, col3, col4 = st.columns([2,2,3,3])
+# ---- UI配置 ----
+title_input = st.text_input("題名（部分一致）")
 
-with col1:
-    title_input = st.text_input("題名（部分一致）")
+# 作曲者はプルダウン（単一選択）
+composer_input = st.selectbox(
+    "作曲者",
+    options=["指定しない"] + composer_list
+)
 
-with col2:
-    composer_input = st.multiselect(
-        "作曲者",
-        options=composer_list,
-        default=composer_list
-    )
+# 声部はチェックボックス横一列表示
+st.write("声部")
+cols = st.columns(len(part_list))
+part_input = []
+for i, part in enumerate(part_list):
+    if cols[i].checkbox(part, value=True):
+        part_input.append(part)
 
-with col3:
-    part_input = st.multiselect(
-        "声部",
-        options=part_list,
-        default=part_list
-    )
-
-with col4:
-    type_input = st.multiselect(
-        "区分",
-        options=type_list,
-        default=type_list
-    )
+# 区分もチェックボックス横一列表示
+st.write("区分")
+cols = st.columns(len(type_list))
+type_input = []
+for i, t in enumerate(type_list):
+    if cols[i].checkbox(t, value=True):
+        type_input.append(t)
 
 # =========================
 # 検索処理
@@ -167,9 +165,9 @@ if title_input:
         filtered_df["title"].str.contains(title_input, case=False, na=False)
     ]
 
-if composer_input:
+if composer_input and composer_input != "指定しない":
     filtered_df = filtered_df[
-        filtered_df["composer"].isin(composer_input)
+        filtered_df["composer"] == composer_input
     ]
 
 if part_input:
