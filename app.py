@@ -7,30 +7,29 @@ from googleapiclient.discovery import build
 # =========================
 # 基本設定
 # =========================
+
 st.set_page_config(
-    page_title="楽譜管理アプリ（Google Drive連携）",
+    page_title="楽譜管理アプリ",
     layout="wide"
 )
 
-st.title("🎼 楽譜管理アプリ（Google Drive連携）")
+st.title("🎼 楽譜管理アプリ")
 
-st.write("""
-Google Drive 上の楽譜PDFを  
-**題名・作曲者・声部・区分**で検索できます。
-
-📁 ファイル名形式  
-`00題名-XYZ作曲者.pdf`
-""")
+st.caption(
+    "Google Drive 上の楽譜PDFを、題名・作曲者・声部・区分で検索できます"
+)
 
 # =========================
 # Google Drive 設定
 # =========================
+
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
 # =========================
+
 TYPE_MAP = {
     "A": "オリジナル（伴奏有）",
     "B": "オリジナル（無伴奏）",
@@ -56,22 +55,28 @@ PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 # =========================
 # ファイル名解析
 # =========================
-def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
-    match = re.match(pattern, filename)
 
-    if not match:
+def parse_filename(filename):
+    """
+    新命名規則対応
+    例:
+    11AveMaria-AG4Bach★.pdf
+    12Song-UCComposer.pdf
+    """
+    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
+    m = re.match(pattern, filename)
+    if not m:
         return None
 
-    code, title, x, y, z, composer = match.groups()
+    code, title, t, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
-    if y == "U":
+    work_type = TYPE_MAP[t]
+
+    if p == "U":
         part = "斉唱"
     else:
-        part = f"{PART_BASE_MAP[y]}{NUM_MAP[z]}"
-
-    work_type = TYPE_MAP[x]
+        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
 
     return {
         "code": code,
@@ -84,7 +89,8 @@ def parse_filename(filename):
 # =========================
 # Google Drive 読み込み
 # =========================
-@st.cache_data(show_spinner=False)
+
+@st.cache_data(ttl=60, show_spinner=False)
 def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
@@ -99,65 +105,63 @@ def load_from_drive():
     ).execute()
 
     rows = []
-    errors = []
-
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
             rows.append({**parsed, "url": f["webViewLink"]})
-        else:
-            errors.append(f["name"])
 
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values("code")
 
-    return df, errors
+    return df
 
-df, error_files = load_from_drive()
+df = load_from_drive()
 
 # =========================
 # 検索UI
 # =========================
-st.subheader("🔍 検索条件")
 
-# 作曲者一覧（★除去済み）
+st.divider()
+st.subheader("🔍 検索")
+
+# 題名
+title_input = st.text_input("題名（部分一致）", placeholder="Ave Maria など")
+
+# 作曲者
 composer_list = sorted(df["composer"].dropna().unique().tolist())
-
-title_input = st.text_input("題名（部分一致）")
 composer_input = st.selectbox(
     "作曲者",
     ["指定しない"] + composer_list
 )
 
-# 横一列チェックボックスを作る関数
-def horizontal_checkboxes(options, key_prefix):
-    selected_options = []
-    cols = st.columns(len(options))
-    for i, opt in enumerate(options):
-        checked = st.session_state.get(f"{key_prefix}_{opt}", True)
-        if cols[i].checkbox(opt, value=checked, key=f"{key_prefix}_{opt}"):
-            selected_options.append(opt)
-    return selected_options
-
-# Drive準拠の既存声部（数字付き）を取得
-existing_parts = df["part"].dropna().unique().tolist()
-# 並び順：混声→女声→男声→斉唱
+# 声部（横一列）
+st.markdown("**声部**")
 existing_parts = sorted(
-    existing_parts,
-    key=lambda x: (PART_ORDER.index(re.match(r"(混声|女声|男声|斉唱)", x).group()), x)
+    df["part"].dropna().unique().tolist(),
+    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
 
-# Drive準拠の区分を取得
-existing_types = sorted(df["type"].dropna().unique().tolist())
+part_cols = st.columns(len(existing_parts))
+part_checks = {}
 
-# 横一列チェックボックス
-part_inputs = horizontal_checkboxes(existing_parts, "part")
-type_inputs = horizontal_checkboxes(existing_types, "type")
+for col, part in zip(part_cols, existing_parts):
+    with col:
+        part_checks[part] = st.checkbox(part, value=True)
+
+# 区分（横一列）
+st.markdown("**区分**")
+type_cols = st.columns(len(TYPE_MAP))
+type_checks = {}
+
+for col, t in zip(type_cols, TYPE_MAP.values()):
+    with col:
+        type_checks[t] = st.checkbox(t, value=True)
 
 # =========================
 # 検索処理
 # =========================
+
 filtered_df = df.copy()
 
 if title_input:
@@ -166,40 +170,30 @@ if title_input:
     ]
 
 if composer_input != "指定しない":
-    filtered_df = filtered_df[filtered_df["composer"] == composer_input]
+    filtered_df = filtered_df[
+        filtered_df["composer"] == composer_input
+    ]
 
-if part_inputs:
-    filtered_df = filtered_df[filtered_df["part"].isin(part_inputs)]
+selected_parts = [p for p, v in part_checks.items() if v]
+filtered_df = filtered_df[filtered_df["part"].isin(selected_parts)]
 
-if type_inputs:
-    filtered_df = filtered_df[filtered_df["type"].isin(type_inputs)]
+selected_types = [t for t, v in type_checks.items() if v]
+filtered_df = filtered_df[filtered_df["type"].isin(selected_types)]
 
 # =========================
-# 検索結果表示（数字を削除）
+# 検索結果
 # =========================
+
+st.divider()
 st.subheader("📄 検索結果")
-if filtered_df.empty:
-    st.warning("該当する楽譜が見つかりませんでした。")
-else:
-    display_df = filtered_df.copy()
-    # 表示用に数字を削除
-    display_df["part"] = display_df["part"].str.replace(r"[234]", "", regex=True)
 
+if filtered_df.empty:
+    st.info("該当する楽譜がありません")
+else:
     st.dataframe(
-        display_df.drop(columns=["code"]),
+        filtered_df.drop(columns=["code"]),
         use_container_width=True,
         column_config={
-            "url": st.column_config.LinkColumn(
-                "楽譜リンク",
-                display_text="開く"
-            )
+            "url": st.column_config.LinkColumn("楽譜", display_text="開く")
         }
     )
-
-# =========================
-# ファイル名エラー表示
-# =========================
-if error_files:
-    with st.expander("⚠ ファイル名ルールに合っていないPDF"):
-        for name in error_files:
-            st.write(f"- {name}")
