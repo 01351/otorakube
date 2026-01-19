@@ -4,270 +4,198 @@ import re
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# =========================
+# =====================
 # 基本設定
-# =========================
-
+# =====================
 st.set_page_config(
-    page_title="楽譜管理アプリ",
+    page_title="楽譜検索",
     layout="wide"
 )
 
-st.title("楽譜管理アプリ")
-st.caption("Google Drive 上の楽譜PDFを検索できます")
+DRIVE_FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
-# =========================
-# Google Drive 設定
-# =========================
+# =====================
+# Google Drive 接続
+# =====================
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=["https://www.googleapis.com/auth/drive.readonly"],
+)
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+drive_service = build("drive", "v3", credentials=credentials)
 
-# =========================
-# 定義マップ
-# =========================
-
-TYPE_MAP = {
-    "A": "オリジナル（伴奏有）",
-    "B": "オリジナル（無伴奏）",
-    "C": "アレンジ",
-    "D": "特殊"
-}
-
-PART_BASE_MAP = {
-    "G": "混声",
-    "F": "女声",
-    "M": "男声",
-    "U": "斉唱"
-}
-
-NUM_MAP = {
-    "2": "二部",
-    "3": "三部",
-    "4": "四部"
-}
-
-PART_ORDER = ["混声", "女声", "男声", "斉唱"]
-
-PART_COLOR = {
-    "混声": "#2563eb",
-    "女声": "#db2777",
-    "男声": "#16a34a",
-    "斉唱": "#9333ea"
-}
-
-# =========================
-# ファイル名解析
-# =========================
-
-def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
-    m = re.match(pattern, filename)
-    if not m:
-        return None
-
-    code, title, t, p, n, composer = m.groups()
-    composer = composer.replace("★", "").strip()
-
-    if p == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
-
-    return {
-        "code": code,
-        "曲名": title.strip(),
-        "作曲者": composer,
-        "声部": part,
-        "区分": TYPE_MAP[t]
-    }
-
-# =========================
-# Google Drive 読み込み
-# =========================
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_from_drive():
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=SCOPES
-    )
-
-    service = build("drive", "v3", credentials=credentials)
-
-    results = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
+# =====================
+# Drive からファイル取得（毎回）
+# =====================
+def fetch_drive_files():
+    results = drive_service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
+        fields="files(id, name)"
     ).execute()
 
     rows = []
+
     for f in results.get("files", []):
-        parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+        name = f["name"]
 
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df.sort_values("code")
+        # 想定ファイル名例：
+        # 曲名__作曲者__混声四部__合唱.pdf
+        parts = name.replace(".pdf", "").split("__")
+        if len(parts) < 4:
+            continue
 
-    return df
+        title, composer, part, category = parts[:4]
 
-df = load_from_drive()
+        composer = re.sub(r"[★☆]", "", composer)
 
-# =========================
-# 検索UI
-# =========================
+        # 声部正規化
+        if part.startswith("斉唱"):
+            part_display = "斉唱"
+            part_type = "斉唱"
+        else:
+            part_display = part
+            part_type = re.sub(r"[二三四1234]部?", "", part)
 
-st.divider()
-st.subheader("検索")
+        rows.append({
+            "曲名": title,
+            "作曲者": composer,
+            "声部": part_display,
+            "声部種別": part_type,
+            "区分": category,
+            "url": f"https://drive.google.com/file/d/{f['id']}/view"
+        })
 
-title_input = st.text_input("曲名（部分一致）")
+    return pd.DataFrame(rows)
 
-composer_list = sorted(df["作曲者"].dropna().unique().tolist())
-composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 声部（横一列）
-st.markdown("**声部**")
-existing_parts = sorted(
-    df["声部"].dropna().unique().tolist(),
-    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-)
+df = fetch_drive_files()
 
-part_cols = st.columns(len(existing_parts))
-part_checks = {}
-for col, part in zip(part_cols, existing_parts):
-    with col:
-        part_checks[part] = st.checkbox(part, value=True)
+# =====================
+# 選択肢生成
+# =====================
+PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# 区分（横一列）
-st.markdown("**区分**")
-type_cols = st.columns(len(TYPE_MAP))
-type_checks = {}
-for col, t in zip(type_cols, TYPE_MAP.values()):
-    with col:
-        type_checks[t] = st.checkbox(t, value=True)
+existing_parts = [
+    p for p in PART_ORDER
+    if p in df["声部種別"].unique()
+]
 
-# 並び替え
-st.markdown("**並び替え**")
-sort_option = st.selectbox(
-    "並び替え方法",
-    [
-        "曲名（標準）",
-        "曲名（逆順）",
+existing_categories = sorted(df["区分"].dropna().unique())
+existing_composers = sorted(df["作曲者"].dropna().unique())
+
+# =====================
+# UI（検索条件）
+# =====================
+st.markdown("### 🔍 検索条件")
+
+col1, col2, col3, col4 = st.columns([2, 2, 3, 3])
+
+with col1:
+    keyword = st.text_input("曲名", "")
+
+with col2:
+    composer_input = st.selectbox(
         "作曲者",
-        "声部"
-    ]
-)
+        ["指定しない"] + existing_composers
+    )
 
-# =========================
-# 検索処理
-# =========================
+with col3:
+    st.markdown("**声部（複数選択可）**")
+    part_inputs = []
+    part_cols = st.columns(len(existing_parts))
+    for c, p in zip(part_cols, existing_parts):
+        with c:
+            if st.checkbox(p, value=True):
+                part_inputs.append(p)
 
-filtered_df = df.copy()
+with col4:
+    st.markdown("**区分（複数選択可）**")
+    cat_inputs = []
+    cat_cols = st.columns(len(existing_categories))
+    for c, k in zip(cat_cols, existing_categories):
+        with c:
+            if st.checkbox(k, value=True):
+                cat_inputs.append(k)
 
-if title_input:
-    filtered_df = filtered_df[
-        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
-    ]
+# =====================
+# フィルタ処理
+# =====================
+filtered = df.copy()
+
+if keyword:
+    filtered = filtered[filtered["曲名"].str.contains(keyword)]
 
 if composer_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["作曲者"] == composer_input
-    ]
+    filtered = filtered[filtered["作曲者"] == composer_input]
 
-filtered_df = filtered_df[
-    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
-]
+if part_inputs:
+    filtered = filtered[filtered["声部種別"].isin(part_inputs)]
 
-filtered_df = filtered_df[
-    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
-]
+if cat_inputs:
+    filtered = filtered[filtered["区分"].isin(cat_inputs)]
 
-# 並び替え処理
-if sort_option == "曲名（標準）":
-    filtered_df = filtered_df.sort_values("code")
-elif sort_option == "曲名（逆順）":
-    filtered_df = filtered_df.sort_values("code", ascending=False)
-elif sort_option == "作曲者":
-    filtered_df = filtered_df.sort_values("作曲者")
-elif sort_option == "声部":
-    filtered_df["__order"] = filtered_df["声部"].apply(
-        lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-    )
-    filtered_df = filtered_df.sort_values("__order")
-    filtered_df = filtered_df.drop(columns="__order")
+# =====================
+# 結果表示
+# =====================
+st.markdown(f"### 📄 検索結果（{len(filtered)} 件）")
 
-# =========================
-# 検索結果（カード型）
-# =========================
+PART_COLOR = {
+    "混声": "#16a34a",  # 緑
+    "女声": "#db2777",
+    "男声": "#2563eb",  # 青
+    "斉唱": "#9333ea"
+}
 
-st.divider()
-st.subheader("検索結果")
-st.write(f"{len(filtered_df)} 件")
+card_cols = st.columns(3)
 
-if filtered_df.empty:
-    st.info("該当する楽譜がありません")
-else:
-    cards_per_row = 3
-    rows = [
-        filtered_df.iloc[i:i + cards_per_row]
-        for i in range(0, len(filtered_df), cards_per_row)
-    ]
+for i, (_, r) in enumerate(filtered.iterrows()):
+    with card_cols[i % 3]:
+        color = PART_COLOR.get(r["声部種別"], "#999999")
 
-    for row_df in rows:
-        cols = st.columns(len(row_df))
-        for col, (_, r) in zip(cols, row_df.iterrows()):
-            base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-            color = PART_COLOR.get(base_part, "#666666")
-
-            with col:
-                st.markdown(
-                    f"""
-                    <div style="
-                        border-left: 8px solid {color};
-                        padding: 16px;
-                        border-radius: 10px;
-                        background-color: #ffffff;
-                        color: #000000;
-                        height: 320px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: space-between;
-                    ">
-                        <div>
-                            <h3 style="margin-top:0; color:#000000;">
-                                {r['曲名']}
-                            </h3>
-                            <p style="color:#000000;">
-                                <strong>作曲者</strong>：{r['作曲者']}
-                            </p>
-                            <p>
-                                <strong style="color:#000000;">声部</strong>：
-                                <span style="color:{color}; font-weight:600;">
-                                    {r['声部']}
-                                </span>
-                            </p>
-                            <p style="color:#000000;">
-                                <strong>区分</strong>：{r['区分']}
-                            </p>
-                        </div>
-
-                        <div>
-                            <a href="{r['url']}" target="_blank"
-                               style="
-                               display:block;
-                               text-align:center;
-                               padding:10px;
-                               border-radius:8px;
-                               background:#2563eb;
-                               color:white;
-                               text-decoration:none;
-                               font-weight:600;
-                               ">
-                               楽譜を開く
-                            </a>
-                        </div>
+        st.markdown(
+            f"""
+            <div style="
+                border-left: 6px solid {color};
+                padding: 16px;
+                margin-bottom: 16px;
+                border-radius: 12px;
+                background: #f8fafc;
+                height: 220px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            ">
+                <div>
+                    <div style="font-size:16px; font-weight:700; color:#000;">
+                        {r['曲名']}
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    <div style="font-size:13px; color:#000;">
+                        {r['作曲者']}
+                    </div>
+                    <div style="margin-top:6px; color:{color}; font-weight:600;">
+                        {r['声部']}
+                    </div>
+                    <div style="font-size:12px; color:#000;">
+                        {r['区分']}
+                    </div>
+                </div>
+
+                <div>
+                    <a href="{r['url']}" target="_blank"
+                       style="
+                       display:block;
+                       text-align:center;
+                       padding:10px;
+                       border-radius:8px;
+                       background:#2563eb;
+                       color:white;
+                       text-decoration:none;
+                       font-weight:600;
+                       ">
+                       楽譜を開く
+                    </a>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
