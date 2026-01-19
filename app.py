@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 st.title("楽譜管理アプリ")
-st.caption("Google Drive 上の楽譜PDFを、曲名・作曲者・声部・区分で検索できます")
+st.caption("Google Drive 上の楽譜PDFを検索できます")
 
 # =========================
 # Google Drive 設定
@@ -126,9 +126,8 @@ title_input = st.text_input("曲名（部分一致）")
 composer_list = sorted(df["作曲者"].dropna().unique().tolist())
 composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 声部（横一列チェック）
+# 声部（横一列）
 st.markdown("**声部**")
-
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
@@ -136,20 +135,29 @@ existing_parts = sorted(
 
 part_cols = st.columns(len(existing_parts))
 part_checks = {}
-
 for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=True)
 
-# 区分（横一列チェック）
+# 区分（横一列）
 st.markdown("**区分**")
-
 type_cols = st.columns(len(TYPE_MAP))
 type_checks = {}
-
 for col, t in zip(type_cols, TYPE_MAP.values()):
     with col:
         type_checks[t] = st.checkbox(t, value=True)
+
+# 並び替え
+st.markdown("**並び替え**")
+sort_option = st.selectbox(
+    "並び替え方法",
+    [
+        "曲名（標準）",
+        "曲名（逆順）",
+        "作曲者",
+        "声部"
+    ]
+)
 
 # =========================
 # 検索処理
@@ -174,6 +182,20 @@ filtered_df = filtered_df[
 filtered_df = filtered_df[
     filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
 ]
+
+# 並び替え処理
+if sort_option == "曲名（標準）":
+    filtered_df = filtered_df.sort_values("code")
+elif sort_option == "曲名（逆順）":
+    filtered_df = filtered_df.sort_values("code", ascending=False)
+elif sort_option == "作曲者":
+    filtered_df = filtered_df.sort_values("作曲者")
+elif sort_option == "声部":
+    filtered_df["__order"] = filtered_df["声部"].apply(
+        lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
+    )
+    filtered_df = filtered_df.sort_values("__order")
+    filtered_df = filtered_df.drop(columns="__order")
 
 # =========================
 # 検索結果（カード型）
@@ -207,26 +229,45 @@ else:
                         border-radius: 10px;
                         background-color: #ffffff;
                         color: #000000;
-                        margin-bottom: 12px;
+                        height: 320px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
                     ">
-                        <h3 style="margin-top:0; color:#000000;">
-                            {r['曲名']}
-                        </h3>
-                        <p style="color:#000000;">
-                            <strong>作曲者</strong>：{r['作曲者']}
-                        </p>
-                        <p>
-                            <strong style="color:#000000;">声部</strong>：
-                            <span style="color:{color}; font-weight:600;">
-                                {r['声部']}
-                            </span>
-                        </p>
-                        <p style="color:#000000;">
-                            <strong>区分</strong>：{r['区分']}
-                        </p>
+                        <div>
+                            <h3 style="margin-top:0; color:#000000;">
+                                {r['曲名']}
+                            </h3>
+                            <p style="color:#000000;">
+                                <strong>作曲者</strong>：{r['作曲者']}
+                            </p>
+                            <p>
+                                <strong style="color:#000000;">声部</strong>：
+                                <span style="color:{color}; font-weight:600;">
+                                    {r['声部']}
+                                </span>
+                            </p>
+                            <p style="color:#000000;">
+                                <strong>区分</strong>：{r['区分']}
+                            </p>
+                        </div>
+
+                        <div>
+                            <a href="{r['url']}" target="_blank"
+                               style="
+                               display:block;
+                               text-align:center;
+                               padding:10px;
+                               border-radius:8px;
+                               background:#2563eb;
+                               color:white;
+                               text-decoration:none;
+                               font-weight:600;
+                               ">
+                               楽譜を開く
+                            </a>
+                        </div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-
-                st.link_button("楽譜を開く", r["url"])
