@@ -49,6 +49,13 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
+PART_COLOR = {
+    "混声": "#3b82f6",  # blue
+    "女声": "#ec4899",  # pink
+    "男声": "#22c55e",  # green
+    "斉唱": "#a855f7"   # purple
+}
+
 # =========================
 # ファイル名解析
 # =========================
@@ -64,14 +71,17 @@ def parse_filename(filename):
 
     if p == "U":
         part = "斉唱"
+        base_part = "斉唱"
     else:
-        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
+        base_part = PART_BASE_MAP[p]
+        part = f"{base_part}{NUM_MAP.get(n, '')}"
 
     return {
         "code": code,
         "曲名": title.strip(),
         "作曲者": composer,
         "声部": part,
+        "声部種別": base_part,
         "区分": TYPE_MAP[t]
     }
 
@@ -119,7 +129,7 @@ title_input = st.text_input("曲名（部分一致）")
 composer_list = sorted(df["作曲者"].dropna().unique().tolist())
 composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 声部（横一列）
+# 声部（横一列・チェックボックス）
 st.markdown("**声部**")
 
 existing_parts = sorted(
@@ -134,7 +144,7 @@ for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=True)
 
-# 区分（横一列）
+# 区分（横一列・チェックボックス）
 st.markdown("**区分**")
 
 type_cols = st.columns(len(TYPE_MAP))
@@ -169,7 +179,7 @@ filtered_df = filtered_df[
 ]
 
 # =========================
-# 検索結果（カード型）
+# 検索結果（カード型・色分け）
 # =========================
 
 st.divider()
@@ -188,10 +198,28 @@ else:
     for row_df in rows:
         cols = st.columns(len(row_df))
         for col, (_, r) in zip(cols, row_df.iterrows()):
+            color = PART_COLOR.get(r["声部種別"], "#999999")
             with col:
-                with st.container(border=True):
-                    st.markdown(f"### 🎵 {r['曲名']}")
-                    st.markdown(f"**作曲者**：{r['作曲者']}")
-                    st.markdown(f"**声部**：{r['声部']}")
-                    st.markdown(f"**区分**：{r['区分']}")
-                    st.link_button("📄 楽譜を開く", r["楽譜"])
+                st.markdown(
+                    f"""
+                    <div style="
+                        border-left: 8px solid {color};
+                        padding: 16px;
+                        border-radius: 10px;
+                        background-color: #fafafa;
+                        margin-bottom: 12px;
+                    ">
+                        <h3 style="margin-top:0;">🎵 {r['曲名']}</h3>
+                        <p><strong>作曲者</strong>：{r['作曲者']}</p>
+                        <p>
+                          <strong>声部</strong>：
+                          <span style="color:{color}; font-weight:600;">
+                            {r['声部']}
+                          </span>
+                        </p>
+                        <p><strong>区分</strong>：{r['区分']}</p>
+                        <a href="{r['楽譜']}" target="_blank">📄 楽譜を開く</a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
