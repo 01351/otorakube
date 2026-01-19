@@ -25,7 +25,7 @@ credentials = service_account.Credentials.from_service_account_info(
 drive_service = build("drive", "v3", credentials=credentials)
 
 # =====================
-# Drive からファイル取得（毎回）
+# Drive からファイル取得（リアルタイム）
 # =====================
 def fetch_drive_files():
     results = drive_service.files().list(
@@ -38,8 +38,7 @@ def fetch_drive_files():
     for f in results.get("files", []):
         name = f["name"]
 
-        # 想定ファイル名例：
-        # 曲名__作曲者__混声四部__合唱.pdf
+        # 命名規則：曲名__作曲者__声部__区分.pdf
         parts = name.replace(".pdf", "").split("__")
         if len(parts) < 4:
             continue
@@ -48,7 +47,6 @@ def fetch_drive_files():
 
         composer = re.sub(r"[★☆]", "", composer)
 
-        # 声部正規化
         if part.startswith("斉唱"):
             part_display = "斉唱"
             part_type = "斉唱"
@@ -65,26 +63,30 @@ def fetch_drive_files():
             "url": f"https://drive.google.com/file/d/{f['id']}/view"
         })
 
-    return pd.DataFrame(rows)
+    # 🔴 ここが超重要：0件でも列を保証
+    return pd.DataFrame(
+        rows,
+        columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url"]
+    )
 
 
 df = fetch_drive_files()
 
 # =====================
-# 選択肢生成
+# 選択肢生成（安全）
 # =====================
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
 existing_parts = [
     p for p in PART_ORDER
-    if p in df["声部種別"].unique()
+    if p in df["声部種別"].dropna().unique()
 ]
 
 existing_categories = sorted(df["区分"].dropna().unique())
 existing_composers = sorted(df["作曲者"].dropna().unique())
 
 # =====================
-# UI（検索条件）
+# UI
 # =====================
 st.markdown("### 🔍 検索条件")
 
@@ -102,23 +104,25 @@ with col2:
 with col3:
     st.markdown("**声部（複数選択可）**")
     part_inputs = []
-    part_cols = st.columns(len(existing_parts))
-    for c, p in zip(part_cols, existing_parts):
-        with c:
-            if st.checkbox(p, value=True):
-                part_inputs.append(p)
+    if existing_parts:
+        part_cols = st.columns(len(existing_parts))
+        for c, p in zip(part_cols, existing_parts):
+            with c:
+                if st.checkbox(p, value=True):
+                    part_inputs.append(p)
 
 with col4:
     st.markdown("**区分（複数選択可）**")
     cat_inputs = []
-    cat_cols = st.columns(len(existing_categories))
-    for c, k in zip(cat_cols, existing_categories):
-        with c:
-            if st.checkbox(k, value=True):
-                cat_inputs.append(k)
+    if existing_categories:
+        cat_cols = st.columns(len(existing_categories))
+        for c, k in zip(cat_cols, existing_categories):
+            with c:
+                if st.checkbox(k, value=True):
+                    cat_inputs.append(k)
 
 # =====================
-# フィルタ処理
+# フィルタ
 # =====================
 filtered = df.copy()
 
@@ -140,61 +144,58 @@ if cat_inputs:
 st.markdown(f"### 📄 検索結果（{len(filtered)} 件）")
 
 PART_COLOR = {
-    "混声": "#16a34a",  # 緑
+    "混声": "#16a34a",
     "女声": "#db2777",
-    "男声": "#2563eb",  # 青
+    "男声": "#2563eb",
     "斉唱": "#9333ea"
 }
 
-card_cols = st.columns(3)
+cols = st.columns(3)
 
 for i, (_, r) in enumerate(filtered.iterrows()):
-    with card_cols[i % 3]:
+    with cols[i % 3]:
         color = PART_COLOR.get(r["声部種別"], "#999999")
 
         st.markdown(
             f"""
             <div style="
-                border-left: 6px solid {color};
-                padding: 16px;
-                margin-bottom: 16px;
-                border-radius: 12px;
-                background: #f8fafc;
-                height: 220px;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
+                border-left:6px solid {color};
+                padding:16px;
+                border-radius:12px;
+                background:#f8fafc;
+                height:220px;
+                display:flex;
+                flex-direction:column;
+                justify-content:space-between;
             ">
                 <div>
-                    <div style="font-size:16px; font-weight:700; color:#000;">
+                    <div style="font-size:16px;font-weight:700;color:#000;">
                         {r['曲名']}
                     </div>
-                    <div style="font-size:13px; color:#000;">
+                    <div style="font-size:13px;color:#000;">
                         {r['作曲者']}
                     </div>
-                    <div style="margin-top:6px; color:{color}; font-weight:600;">
+                    <div style="margin-top:6px;font-weight:600;color:{color};">
                         {r['声部']}
                     </div>
-                    <div style="font-size:12px; color:#000;">
+                    <div style="font-size:12px;color:#000;">
                         {r['区分']}
                     </div>
                 </div>
 
-                <div>
-                    <a href="{r['url']}" target="_blank"
-                       style="
-                       display:block;
-                       text-align:center;
-                       padding:10px;
-                       border-radius:8px;
-                       background:#2563eb;
-                       color:white;
-                       text-decoration:none;
-                       font-weight:600;
-                       ">
-                       楽譜を開く
-                    </a>
-                </div>
+                <a href="{r['url']}" target="_blank"
+                   style="
+                   display:block;
+                   text-align:center;
+                   padding:10px;
+                   border-radius:8px;
+                   background:#2563eb;
+                   color:white;
+                   text-decoration:none;
+                   font-weight:600;
+                   ">
+                   楽譜を開く
+                </a>
             </div>
             """,
             unsafe_allow_html=True
