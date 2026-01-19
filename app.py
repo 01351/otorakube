@@ -70,6 +70,29 @@ def fetch_drive_files():
 
 df = fetch_drive_files()
 
+st.markdown("## 🛠 デバッグ情報（Drive 取得結果）")
+
+st.write("総ファイル数:", len(df))
+
+st.write("### カラム一覧")
+st.write(df.columns.tolist())
+
+st.write("### 声部（表示用）一覧")
+st.write(df["声部"].value_counts(dropna=False))
+
+st.write("### 声部種別（フィルタ用）一覧")
+st.write(df["声部種別"].value_counts(dropna=False))
+
+st.write("### 区分一覧")
+st.write(df["区分"].value_counts(dropna=False))
+
+st.write("### 作曲者一覧（上位20）")
+st.write(df["作曲者"].value_counts().head(20))
+
+st.write("### DataFrame 先頭10行")
+st.dataframe(df.head(10), use_container_width=True)
+
+
 # =====================
 # 選択肢生成
 # =====================
