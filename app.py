@@ -169,23 +169,29 @@ filtered_df = filtered_df[
 ]
 
 # =========================
-# 検索結果
+# 検索結果（カード型）
 # =========================
 
 st.divider()
 st.subheader("📄 検索結果")
-
 st.write(f"**{len(filtered_df)} 件の楽譜が見つかりました**")
 
 if filtered_df.empty:
     st.info("該当する楽譜がありません")
 else:
-    display_df = filtered_df.drop(columns=["code"]).reset_index(drop=True)
+    cards_per_row = 3
+    rows = [
+        filtered_df.iloc[i:i + cards_per_row]
+        for i in range(0, len(filtered_df), cards_per_row)
+    ]
 
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        column_config={
-            "楽譜": st.column_config.LinkColumn("楽譜", display_text="開く")
-        }
-    )
+    for row_df in rows:
+        cols = st.columns(len(row_df))
+        for col, (_, r) in zip(cols, row_df.iterrows()):
+            with col:
+                with st.container(border=True):
+                    st.markdown(f"### 🎵 {r['曲名']}")
+                    st.markdown(f"**作曲者**：{r['作曲者']}")
+                    st.markdown(f"**声部**：{r['声部']}")
+                    st.markdown(f"**区分**：{r['区分']}")
+                    st.link_button("📄 楽譜を開く", r["楽譜"])
