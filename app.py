@@ -68,30 +68,24 @@ def fetch_drive_files():
         columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url"]
     )
 
-df = fetch_drive_files()
+def fetch_drive_files():
+    results = drive_service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
+        fields="files(id, name, parents)"
+    ).execute()
 
-st.markdown("## 🛠 デバッグ情報（Drive 取得結果）")
+    st.markdown("## 🔧 Drive API デバッグ出力")
+    st.write(results)
 
-st.write("総ファイル数:", len(df))
+    rows = []
+    for f in results.get("files", []):
+        rows.append({
+            "name": f["name"],
+            "id": f["id"],
+            "parents": f.get("parents")
+        })
 
-st.write("### カラム一覧")
-st.write(df.columns.tolist())
-
-st.write("### 声部（表示用）一覧")
-st.write(df["声部"].value_counts(dropna=False))
-
-st.write("### 声部種別（フィルタ用）一覧")
-st.write(df["声部種別"].value_counts(dropna=False))
-
-st.write("### 区分一覧")
-st.write(df["区分"].value_counts(dropna=False))
-
-st.write("### 作曲者一覧（上位20）")
-st.write(df["作曲者"].value_counts().head(20))
-
-st.write("### DataFrame 先頭10行")
-st.dataframe(df.head(10), use_container_width=True)
-
+    return pd.DataFrame(rows)
 
 # =====================
 # 選択肢生成
