@@ -4,217 +4,199 @@ import re
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# =========================
+# =====================
 # 基本設定
-# =========================
-
+# =====================
 st.set_page_config(
-    page_title="楽譜管理アプリ",
+    page_title="楽譜検索",
     layout="wide"
 )
 
-st.title("楽譜管理アプリ")
+DRIVE_FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
-# =========================
-# Google Drive 設定
-# =========================
+# =====================
+# Google Drive 接続
+# =====================
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=["https://www.googleapis.com/auth/drive.readonly"],
+)
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+drive_service = build("drive", "v3", credentials=credentials)
 
-# =========================
-# 定義
-# =========================
-
-TYPE_MAP = {
-    "A": "オリジナル（伴奏有）",
-    "B": "オリジナル（無伴奏）",
-    "C": "アレンジ",
-    "D": "特殊"
-}
-
-PART_BASE_MAP = {
-    "G": "混声",
-    "F": "女声",
-    "M": "男声",
-    "U": "斉唱"
-}
-
-NUM_MAP = {
-    "2": "二部",
-    "3": "三部",
-    "4": "四部"
-}
-
-PART_ORDER = ["混声", "女声", "男声", "斉唱"]
-
-# =========================
-# ファイル名解析
-# =========================
-
-def parse_filename(filename):
-    """
-    例:
-    11AveMaria-AG4Bach★.pdf
-    """
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
-    m = re.match(pattern, filename)
-    if not m:
-        return None
-
-    code, title, t, p, n, composer = m.groups()
-
-    composer = composer.replace("★", "").strip()
-    title = title.strip()
-
-    work_type = TYPE_MAP.get(t)
-
-    if p == "U":
-        part = "斉唱"
-        part_base = "斉唱"
-    else:
-        part_base = PART_BASE_MAP[p]
-        part = f"{part_base}{NUM_MAP.get(n, '')}"
-
-    return {
-        "code": code,
-        "曲名": title,
-        "作曲者": composer,
-        "声部": part,
-        "声部種別": part_base,
-        "区分": work_type
-    }
-
-# =========================
-# Google Drive 読み込み
-# =========================
-
-def load_from_drive():
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=SCOPES
-    )
-
-    service = build("drive", "v3", credentials=credentials)
-
-    res = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
+# =====================
+# Drive からファイル取得（リアルタイム）
+# =====================
+def fetch_drive_files():
+    results = drive_service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
+        fields="files(id, name)"
     ).execute()
 
     rows = []
 
-    for f in res.get("files", []):
-        parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+    for f in results.get("files", []):
+        name = f["name"]
 
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
+        # 命名規則：曲名__作曲者__声部__区分.pdf
+        parts = name.replace(".pdf", "").split("__")
+        if len(parts) < 4:
+            continue
 
-    df = df.sort_values("code")
-    return df
+        title, composer, part, category = parts[:4]
 
-# =========================
-# キャッシュ制御
-# =========================
+        composer = re.sub(r"[★☆]", "", composer)
 
-if "reload" not in st.session_state:
-    st.session_state.reload = 0
+        if part.startswith("斉唱"):
+            part_display = "斉唱"
+            part_type = "斉唱"
+        else:
+            part_display = part
+            part_type = re.sub(r"[二三四1234]部?", "", part)
 
-if st.button("🔄 Drive を再読み込み"):
-    st.session_state.reload += 1
+        rows.append({
+            "曲名": title,
+            "作曲者": composer,
+            "声部": part_display,
+            "声部種別": part_type,
+            "区分": category,
+            "url": f"https://drive.google.com/file/d/{f['id']}/view"
+        })
 
-df = load_from_drive()
+    # 🔴 ここが超重要：0件でも列を保証
+    return pd.DataFrame(
+        rows,
+        columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url"]
+    )
 
-# =========================
-# 検索UI
-# =========================
 
-st.subheader("検索")
+df = fetch_drive_files()
 
-# --- 曲名 ---
-title_input = st.text_input("曲名（部分一致）")
+# =====================
+# 選択肢生成（安全）
+# =====================
+PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# --- 作曲者 ---
-composer_list = sorted(df["作曲者"].dropna().unique().tolist())
-composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
-
-# --- 声部（横一列チェックボックス） ---
-st.markdown("**声部**")
 existing_parts = [
     p for p in PART_ORDER
-    if p in df["声部種別"].unique()
+    if p in df["声部種別"].dropna().unique()
 ]
 
-part_cols = st.columns(len(existing_parts))
-part_checks = {}
+existing_categories = sorted(df["区分"].dropna().unique())
+existing_composers = sorted(df["作曲者"].dropna().unique())
 
-for col, part in zip(part_cols, existing_parts):
-    with col:
-        part_checks[part] = st.checkbox(part, value=True)
+# =====================
+# UI
+# =====================
+st.markdown("### 🔍 検索条件")
 
-# --- 区分（横一列チェックボックス） ---
-st.markdown("**区分**")
-type_list = df["区分"].dropna().unique().tolist()
-type_cols = st.columns(len(type_list))
-type_checks = {}
+col1, col2, col3, col4 = st.columns([2, 2, 3, 3])
 
-for col, t in zip(type_cols, type_list):
-    with col:
-        type_checks[t] = st.checkbox(t, value=True)
+with col1:
+    keyword = st.text_input("曲名", "")
 
-# =========================
-# 検索処理
-# =========================
+with col2:
+    composer_input = st.selectbox(
+        "作曲者",
+        ["指定しない"] + existing_composers
+    )
 
+with col3:
+    st.markdown("**声部（複数選択可）**")
+    part_inputs = []
+    if existing_parts:
+        part_cols = st.columns(len(existing_parts))
+        for c, p in zip(part_cols, existing_parts):
+            with c:
+                if st.checkbox(p, value=True):
+                    part_inputs.append(p)
+
+with col4:
+    st.markdown("**区分（複数選択可）**")
+    cat_inputs = []
+    if existing_categories:
+        cat_cols = st.columns(len(existing_categories))
+        for c, k in zip(cat_cols, existing_categories):
+            with c:
+                if st.checkbox(k, value=True):
+                    cat_inputs.append(k)
+
+# =====================
+# フィルタ
+# =====================
 filtered = df.copy()
 
-if title_input:
-    filtered = filtered[
-        filtered["曲名"].str.contains(title_input, case=False, na=False)
-    ]
+if keyword:
+    filtered = filtered[filtered["曲名"].str.contains(keyword)]
 
 if composer_input != "指定しない":
     filtered = filtered[filtered["作曲者"] == composer_input]
 
-selected_parts = [k for k, v in part_checks.items() if v]
-filtered = filtered[filtered["声部種別"].isin(selected_parts)]
+if part_inputs:
+    filtered = filtered[filtered["声部種別"].isin(part_inputs)]
 
-selected_types = [k for k, v in type_checks.items() if v]
-filtered = filtered[filtered["区分"].isin(selected_types)]
+if cat_inputs:
+    filtered = filtered[filtered["区分"].isin(cat_inputs)]
 
-# =========================
-# 検索結果
-# =========================
+# =====================
+# 結果表示
+# =====================
+st.markdown(f"### 📄 検索結果（{len(filtered)} 件）")
 
-st.subheader(f"検索結果：{len(filtered)} 件")
+PART_COLOR = {
+    "混声": "#16a34a",
+    "女声": "#db2777",
+    "男声": "#2563eb",
+    "斉唱": "#9333ea"
+}
 
-if filtered.empty:
-    st.info("該当する楽譜はありません")
-else:
-    for _, r in filtered.iterrows():
-        with st.container(border=True):
-            st.markdown(f"### {r['曲名']}")
-            st.write(f"作曲者：{r['作曲者']}")
-            st.write(f"声部：{r['声部']}")
-            st.write(f"区分：{r['区分']}")
+cols = st.columns(3)
 
-            st.markdown(
-                f"""
+for i, (_, r) in enumerate(filtered.iterrows()):
+    with cols[i % 3]:
+        color = PART_COLOR.get(r["声部種別"], "#999999")
+
+        st.markdown(
+            f"""
+            <div style="
+                border-left:6px solid {color};
+                padding:16px;
+                border-radius:12px;
+                background:#f8fafc;
+                height:220px;
+                display:flex;
+                flex-direction:column;
+                justify-content:space-between;
+            ">
+                <div>
+                    <div style="font-size:16px;font-weight:700;color:#000;">
+                        {r['曲名']}
+                    </div>
+                    <div style="font-size:13px;color:#000;">
+                        {r['作曲者']}
+                    </div>
+                    <div style="margin-top:6px;font-weight:600;color:{color};">
+                        {r['声部']}
+                    </div>
+                    <div style="font-size:12px;color:#000;">
+                        {r['区分']}
+                    </div>
+                </div>
+
                 <a href="{r['url']}" target="_blank"
                    style="
-                   display:inline-block;
-                   padding:8px 16px;
+                   display:block;
+                   text-align:center;
+                   padding:10px;
+                   border-radius:8px;
                    background:#2563eb;
                    color:white;
-                   border-radius:6px;
                    text-decoration:none;
                    font-weight:600;
                    ">
                    楽譜を開く
                 </a>
-                """,
-                unsafe_allow_html=True
-            )
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
