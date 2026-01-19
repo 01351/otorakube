@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎼 楽譜管理アプリ")
+st.title("楽譜管理アプリ")
 st.caption("Google Drive 上の楽譜PDFを、曲名・作曲者・声部・区分で検索できます")
 
 # =========================
@@ -50,10 +50,10 @@ NUM_MAP = {
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
 PART_COLOR = {
-    "混声": "#3b82f6",
-    "女声": "#ec4899",
-    "男声": "#22c55e",
-    "斉唱": "#a855f7"
+    "混声": "#2563eb",
+    "女声": "#db2777",
+    "男声": "#16a34a",
+    "斉唱": "#9333ea"
 }
 
 # =========================
@@ -104,7 +104,7 @@ def load_from_drive():
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
-            rows.append({**parsed, "楽譜": f["webViewLink"]})
+            rows.append({**parsed, "url": f["webViewLink"]})
 
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -119,7 +119,7 @@ df = load_from_drive()
 # =========================
 
 st.divider()
-st.subheader("🔍 検索")
+st.subheader("検索")
 
 title_input = st.text_input("曲名（部分一致）")
 
@@ -176,12 +176,12 @@ filtered_df = filtered_df[
 ]
 
 # =========================
-# 検索結果（カード型・声部色分け）
+# 検索結果（カード型）
 # =========================
 
 st.divider()
-st.subheader("📄 検索結果")
-st.write(f"**{len(filtered_df)} 件の楽譜が見つかりました**")
+st.subheader("検索結果")
+st.write(f"{len(filtered_df)} 件")
 
 if filtered_df.empty:
     st.info("該当する楽譜がありません")
@@ -196,7 +196,7 @@ else:
         cols = st.columns(len(row_df))
         for col, (_, r) in zip(cols, row_df.iterrows()):
             base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-            color = PART_COLOR.get(base_part, "#999999")
+            color = PART_COLOR.get(base_part, "#666666")
 
             with col:
                 st.markdown(
@@ -205,20 +205,28 @@ else:
                         border-left: 8px solid {color};
                         padding: 16px;
                         border-radius: 10px;
-                        background-color: #fafafa;
+                        background-color: #ffffff;
+                        color: #000000;
                         margin-bottom: 12px;
                     ">
-                        <h3 style="margin-top:0;">🎵 {r['曲名']}</h3>
-                        <p><strong>作曲者</strong>：{r['作曲者']}</p>
-                        <p>
-                          <strong>声部</strong>：
-                          <span style="color:{color}; font-weight:600;">
-                            {r['声部']}
-                          </span>
+                        <h3 style="margin-top:0; color:#000000;">
+                            {r['曲名']}
+                        </h3>
+                        <p style="color:#000000;">
+                            <strong>作曲者</strong>：{r['作曲者']}
                         </p>
-                        <p><strong>区分</strong>：{r['区分']}</p>
-                        <a href="{r['楽譜']}" target="_blank">📄 楽譜を開く</a>
+                        <p>
+                            <strong style="color:#000000;">声部</strong>：
+                            <span style="color:{color}; font-weight:600;">
+                                {r['声部']}
+                            </span>
+                        </p>
+                        <p style="color:#000000;">
+                            <strong>区分</strong>：{r['区分']}
+                        </p>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
+
+                st.link_button("楽譜を開く", r["url"])
