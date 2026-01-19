@@ -28,14 +28,15 @@ PART_MAP = {
     "U": "斉唱"
 }
 
-PART_COLOR = {
-    "混声": "#2563eb",  # 青
-    "女声": "#db2777",  # ピンク
-    "男声": "#16a34a",  # 緑
-    "斉唱": "#9333ea"   # 紫
-}
-
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
+
+# 🎨 声部カラー（最新版）
+PART_COLOR = {
+    "混声": "#16a34a",   # 緑
+    "女声": "#db2777",   # ピンク
+    "男声": "#2563eb",   # 青
+    "斉唱": "#9333ea"    # 紫
+}
 
 # =====================
 # Google Drive 接続
@@ -49,7 +50,7 @@ drive = build("drive", "v3", credentials=credentials)
 # =====================
 # Drive 読み込み（リアルタイム）
 # =====================
-def load_files():
+def load_drive_files():
     res = drive.files().list(
         q=f"'{DRIVE_FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(id,name)"
@@ -58,16 +59,14 @@ def load_files():
     rows = []
 
     for f in res.get("files", []):
-        name = f["name"]
-
         m = re.match(
             r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$",
-            name
+            f["name"]
         )
         if not m:
             continue
 
-        code, title, t, p, num, composer = m.groups()
+        _, title, t, p, num, composer = m.groups()
         composer = re.sub(r"[★☆]", "", composer).strip()
 
         part_base = PART_MAP[p]
@@ -79,32 +78,25 @@ def load_files():
             "声部": part,
             "声部種別": part_base,
             "区分": TYPE_MAP[t],
-            "url": f"https://drive.google.com/file/d/{f['id']}/view",
-            "_order": code
+            "url": f"https://drive.google.com/file/d/{f['id']}/view"
         })
 
-    df = pd.DataFrame(
+    return pd.DataFrame(
         rows,
-        columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url", "_order"]
+        columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url"]
     )
 
-    if not df.empty:
-        df = df.sort_values("_order")
-
-    return df
-
-
-df = load_files()
+df = load_drive_files()
 
 # =====================
 # 検索UI
 # =====================
-st.markdown("## 🔍 検索")
+st.markdown("### 🔍 検索条件")
 
 col1, col2, col3, col4 = st.columns([2, 2, 3, 3])
 
 with col1:
-    keyword = st.text_input("曲名")
+    keyword = st.text_input("曲名", "")
 
 with col2:
     composers = sorted(df["作曲者"].dropna().unique())
@@ -113,9 +105,12 @@ with col2:
 with col3:
     st.markdown("**声部**")
     part_inputs = []
-    parts_exist = [p for p in PART_ORDER if p in df["声部種別"].unique()]
-    part_cols = st.columns(len(parts_exist))
-    for c, p in zip(part_cols, parts_exist):
+    existing_parts = [
+        p for p in PART_ORDER
+        if p in df["声部種別"].unique()
+    ]
+    cols = st.columns(len(existing_parts))
+    for c, p in zip(cols, existing_parts):
         with c:
             if st.checkbox(p, value=True):
                 part_inputs.append(p)
@@ -123,15 +118,15 @@ with col3:
 with col4:
     st.markdown("**区分**")
     cat_inputs = []
-    cats = sorted(df["区分"].unique())
-    cat_cols = st.columns(len(cats))
-    for c, k in zip(cat_cols, cats):
+    categories = sorted(df["区分"].dropna().unique())
+    cols = st.columns(len(categories))
+    for c, k in zip(cols, categories):
         with c:
             if st.checkbox(k, value=True):
                 cat_inputs.append(k)
 
 # =====================
-# フィルタ
+# フィルタ処理
 # =====================
 filtered = df.copy()
 
@@ -148,15 +143,15 @@ if cat_inputs:
     filtered = filtered[filtered["区分"].isin(cat_inputs)]
 
 # =====================
-# 結果表示
+# 検索結果
 # =====================
-st.markdown(f"## 📄 検索結果（{len(filtered)} 件）")
+st.markdown(f"### 📄 検索結果（{len(filtered)} 件）")
 
 cols = st.columns(3)
 
 for i, (_, r) in enumerate(filtered.iterrows()):
     with cols[i % 3]:
-        color = PART_COLOR.get(r["声部種別"], "#999")
+        color = PART_COLOR.get(r["声部種別"], "#999999")
 
         st.markdown(
             f"""
