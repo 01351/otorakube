@@ -29,7 +29,7 @@ drive_service = build("drive", "v3", credentials=credentials)
 # =====================
 def fetch_drive_files():
     results = drive_service.files().list(
-        q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
+        q=f"'{DRIVE_FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(id, name)"
     ).execute()
 
@@ -63,17 +63,15 @@ def fetch_drive_files():
             "url": f"https://drive.google.com/file/d/{f['id']}/view"
         })
 
-    # 🔴 ここが超重要：0件でも列を保証
     return pd.DataFrame(
         rows,
         columns=["曲名", "作曲者", "声部", "声部種別", "区分", "url"]
     )
 
-
 df = fetch_drive_files()
 
 # =====================
-# 選択肢生成（安全）
+# 選択肢生成
 # =====================
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
@@ -122,12 +120,14 @@ with col4:
                     cat_inputs.append(k)
 
 # =====================
-# フィルタ
+# フィルタ処理
 # =====================
 filtered = df.copy()
 
 if keyword:
-    filtered = filtered[filtered["曲名"].str.contains(keyword)]
+    filtered = filtered[
+        filtered["曲名"].str.contains(keyword, case=False, na=False)
+    ]
 
 if composer_input != "指定しない":
     filtered = filtered[filtered["作曲者"] == composer_input]
@@ -144,10 +144,10 @@ if cat_inputs:
 st.markdown(f"### 📄 検索結果（{len(filtered)} 件）")
 
 PART_COLOR = {
-    "混声": "#16a34a",
-    "女声": "#db2777",
-    "男声": "#2563eb",
-    "斉唱": "#9333ea"
+    "混声": "#2563eb",   # 青
+    "女声": "#db2777",   # ピンク
+    "男声": "#16a34a",   # 緑
+    "斉唱": "#9333ea"    # 紫
 }
 
 cols = st.columns(3)
@@ -163,13 +163,13 @@ for i, (_, r) in enumerate(filtered.iterrows()):
                 padding:16px;
                 border-radius:12px;
                 background:#f8fafc;
-                height:220px;
+                height:240px;
                 display:flex;
                 flex-direction:column;
                 justify-content:space-between;
             ">
                 <div>
-                    <div style="font-size:16px;font-weight:700;color:#000;">
+                    <div style="font-size:16px;font-weight:700;color:#000;min-height:48px;">
                         {r['曲名']}
                     </div>
                     <div style="font-size:13px;color:#000;">
