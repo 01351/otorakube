@@ -14,10 +14,7 @@ st.set_page_config(
 )
 
 st.title("🎼 楽譜管理アプリ")
-
-st.caption(
-    "Google Drive 上の楽譜PDFを、題名・作曲者・声部・区分で検索できます"
-)
+st.caption("Google Drive 上の楽譜PDFを、題名・作曲者・声部・区分で検索できます")
 
 # =========================
 # Google Drive 設定
@@ -57,12 +54,6 @@ PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 # =========================
 
 def parse_filename(filename):
-    """
-    新命名規則対応
-    例:
-    11AveMaria-AG4Bach★.pdf
-    12Song-UCComposer.pdf
-    """
     pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     m = re.match(pattern, filename)
     if not m:
@@ -70,8 +61,6 @@ def parse_filename(filename):
 
     code, title, t, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
-
-    work_type = TYPE_MAP[t]
 
     if p == "U":
         part = "斉唱"
@@ -83,7 +72,7 @@ def parse_filename(filename):
         "title": title.strip(),
         "composer": composer,
         "part": part,
-        "type": work_type
+        "type": TYPE_MAP[t]
     }
 
 # =========================
@@ -125,18 +114,15 @@ df = load_from_drive()
 st.divider()
 st.subheader("🔍 検索")
 
-# 題名
-title_input = st.text_input("題名（部分一致）", placeholder="Ave Maria など")
+# 題名 → 作曲者 → 声部 → 区分
+title_input = st.text_input("題名（部分一致）")
 
-# 作曲者
 composer_list = sorted(df["composer"].dropna().unique().tolist())
-composer_input = st.selectbox(
-    "作曲者",
-    ["指定しない"] + composer_list
-)
+composer_input = st.selectbox("作曲者", ["指定しない"] + composer_list)
 
-# 声部（横一列）
+# 声部（横一列チェックボックス）
 st.markdown("**声部**")
+
 existing_parts = sorted(
     df["part"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
@@ -149,8 +135,9 @@ for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=True)
 
-# 区分（横一列）
+# 区分（横一列チェックボックス）
 st.markdown("**区分**")
+
 type_cols = st.columns(len(TYPE_MAP))
 type_checks = {}
 
@@ -187,11 +174,16 @@ filtered_df = filtered_df[filtered_df["type"].isin(selected_types)]
 st.divider()
 st.subheader("📄 検索結果")
 
+# ✅ 件数表示
+st.write(f"**{len(filtered_df)} 件の楽譜が見つかりました**")
+
 if filtered_df.empty:
     st.info("該当する楽譜がありません")
 else:
     st.dataframe(
-        filtered_df.drop(columns=["code"]),
+        filtered_df
+        .drop(columns=["code"])
+        .reset_index(drop=True),   # ← 数字（インデックス）を消す
         use_container_width=True,
         column_config={
             "url": st.column_config.LinkColumn("楽譜", display_text="開く")
