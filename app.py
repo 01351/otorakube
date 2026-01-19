@@ -114,7 +114,6 @@ df = load_from_drive()
 st.divider()
 st.subheader("🔍 検索")
 
-# 題名 → 作曲者 → 声部 → 区分
 title_input = st.text_input("題名（部分一致）")
 
 composer_list = sorted(df["composer"].dropna().unique().tolist())
@@ -161,11 +160,13 @@ if composer_input != "指定しない":
         filtered_df["composer"] == composer_input
     ]
 
-selected_parts = [p for p, v in part_checks.items() if v]
-filtered_df = filtered_df[filtered_df["part"].isin(selected_parts)]
+filtered_df = filtered_df[
+    filtered_df["part"].isin([p for p, v in part_checks.items() if v])
+]
 
-selected_types = [t for t, v in type_checks.items() if v]
-filtered_df = filtered_df[filtered_df["type"].isin(selected_types)]
+filtered_df = filtered_df[
+    filtered_df["type"].isin([t for t, v in type_checks.items() if v])
+]
 
 # =========================
 # 検索結果
@@ -174,16 +175,22 @@ filtered_df = filtered_df[filtered_df["type"].isin(selected_types)]
 st.divider()
 st.subheader("📄 検索結果")
 
-# ✅ 件数表示
 st.write(f"**{len(filtered_df)} 件の楽譜が見つかりました**")
 
 if filtered_df.empty:
     st.info("該当する楽譜がありません")
 else:
-    st.dataframe(
+    display_df = (
         filtered_df
         .drop(columns=["code"])
-        .reset_index(drop=True),   # ← 数字（インデックス）を消す
+        .reset_index(drop=True)
+    )
+
+    # ✅ 1始まりの番号列を追加
+    display_df.insert(0, "No", range(1, len(display_df) + 1))
+
+    st.dataframe(
+        display_df,
         use_container_width=True,
         column_config={
             "url": st.column_config.LinkColumn("楽譜", display_text="開く")
