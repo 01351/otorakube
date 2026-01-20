@@ -133,28 +133,38 @@ with col2:
 
 st.caption("▼ 詳細条件")
 
+# =========================
 # 声部
+# =========================
+
 st.markdown("**声部**")
+
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
 
-all_part = st.checkbox("すべて選択", value=True)
+all_part = st.checkbox("すべて選択", value=True, key="all_part")
+
 part_cols = st.columns(len(existing_parts))
 part_checks = {}
 for col, part in zip(part_cols, existing_parts):
     with col:
-        part_checks[part] = st.checkbox(part, value=all_part)
+        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
+# =========================
 # 区分
+# =========================
+
 st.markdown("**区分**")
-all_type = st.checkbox("すべて選択", value=True)
+
+all_type = st.checkbox("すべて選択", value=True, key="all_type")
+
 type_cols = st.columns(len(TYPE_MAP))
 type_checks = {}
 for col, t in zip(type_cols, TYPE_MAP.values()):
     with col:
-        type_checks[t] = st.checkbox(t, value=all_type)
+        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
 
 # =========================
 # 検索処理
@@ -189,7 +199,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（構造修正版）
+# カード表示（確定版）
 # =========================
 
 if filtered_df.empty:
@@ -222,7 +232,6 @@ row-gap:6px;
 margin-bottom:24px;
 ">
 
-<!-- 曲名 -->
 <h3 style="
 margin:0;
 font-size:20px;
@@ -234,7 +243,6 @@ overflow:hidden;
 {r['曲名']}
 </h3>
 
-<!-- 本文＋ボタンを同一ブロックに -->
 <div style="display:flex;flex-direction:column;gap:6px;">
 
 <p style="font-size:13px;color:{TEXT_SUB};margin:0;">
