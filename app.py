@@ -2,7 +2,6 @@
 # ②「楽譜を開く」ボタンはもう少し色の強調を抑えて
 # ③今度はカード上の「楽譜を開く」の下に余白ができてしまったので、適切になおしてほしい
 
-
 import streamlit as st
 import pandas as pd
 import re
@@ -54,17 +53,23 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# UIカラー規則
-# 混声：緑 / 男声：青
+# UIカラー（ダークモード対応）
 PART_COLOR = {
-    "混声": "#16a34a",
+    "混声": "#16a34a",  # 緑
     "女声": "#db2777",
-    "男声": "#2563eb",
+    "男声": "#2563eb",  # 青
     "斉唱": "#9333ea"
 }
 
-TEXT_MAIN = "#0f172a"
-TEXT_SUB = "#334155"
+CARD_BG = "#ffffff"
+TEXT_TITLE = "#0f172a"
+TEXT_MAIN = "#1e293b"
+TEXT_SUB = "#475569"
+TEXT_MUTE = "#64748b"
+
+BUTTON_BG = "#e2e8f0"
+BUTTON_TEXT = "#0f172a"
+BUTTON_HOVER = "#cbd5e1"
 
 # =========================
 # ファイル名解析
@@ -194,30 +199,10 @@ filtered_df = filtered_df[
 st.divider()
 st.subheader("検索結果")
 
-col_l, col_r = st.columns([3, 1])
-with col_l:
-    st.write(f"{len(filtered_df)} 件")
-with col_r:
-    sort_option = st.selectbox(
-        "並び替え",
-        ["曲名（標準）", "曲名（逆順）", "作曲者", "声部"],
-        label_visibility="collapsed"
-    )
-
-if sort_option == "曲名（標準）":
-    filtered_df = filtered_df.sort_values("code")
-elif sort_option == "曲名（逆順）":
-    filtered_df = filtered_df.sort_values("code", ascending=False)
-elif sort_option == "作曲者":
-    filtered_df = filtered_df.sort_values("作曲者")
-elif sort_option == "声部":
-    filtered_df["__order"] = filtered_df["声部"].apply(
-        lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-    )
-    filtered_df = filtered_df.sort_values("__order").drop(columns="__order")
+st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（①〜④反映）
+# カード表示
 # =========================
 
 if filtered_df.empty:
@@ -239,30 +224,36 @@ else:
                 st.markdown(
 f"""
 <div style="
+background:{CARD_BG};
 border-left:8px solid {color};
+border-radius:14px;
 padding:16px;
-border-radius:12px;
-background:#ffffff;
 height:320px;
 display:flex;
 flex-direction:column;
-margin-bottom:20px;
+justify-content:space-between;
+margin-bottom:24px;
 ">
 
+<div>
+
+<div style="min-height:56px; display:flex; align-items:center;">
 <h3 style="
-margin:0 0 8px 0;
+margin:0;
 font-size:20px;
 font-weight:700;
-color:{TEXT_MAIN};
-min-height:48px;">
+line-height:1.3;
+color:{TEXT_TITLE};
+">
 {r['曲名']}
 </h3>
+</div>
 
-<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 6px 0;">
+<p style="margin:4px 0 6px 0; font-size:13px; color:{TEXT_MUTE};">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 6px 0;color:{TEXT_MAIN};">
+<p style="margin:0 0 6px 0; font-size:14px; color:{TEXT_MAIN};">
 声部：
 <span style="color:{color};">
 {r['声部']}
@@ -275,21 +266,29 @@ padding:4px 10px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:12px;
-color:{TEXT_MAIN};
-margin-bottom:6px;">
+color:{TEXT_SUB};
+">
 {r['区分']}
 </span>
+
+</div>
 
 <a href="{r['url']}" target="_blank"
 style="
 display:block;
 text-align:center;
-padding:10px;
+padding:9px;
 border-radius:8px;
-background:#2563eb;
-color:#ffffff;
+background:{BUTTON_BG};
+color:{BUTTON_TEXT};
 text-decoration:none;
-font-weight:600;">
+font-size:14px;
+font-weight:500;
+margin-top:6px;
+"
+onmouseover="this.style.background='{BUTTON_HOVER}'"
+onmouseout="this.style.background='{BUTTON_BG}'"
+>
 楽譜を開く
 </a>
 
