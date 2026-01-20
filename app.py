@@ -191,7 +191,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（高さ・余白・文字サイズ調整版）
+# カード表示（最終微調整版）
 # =========================
 
 if filtered_df.empty:
@@ -237,7 +237,7 @@ overflow:hidden;
 
 <div style="display:flex;flex-direction:column;">
 
-<p style="font-size:14px;color:{TEXT_SUB};margin:0 0 6px 0;">
+<p style="font-size:16px;color:{TEXT_SUB};margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
 
@@ -261,9 +261,11 @@ color:{TEXT_MAIN};
 
 <a href="{r['url']}" target="_blank"
 style="
-margin-top:8px;
+display:block;
+width:90%;
+margin:12px auto 0 auto;
 text-align:center;
-padding:8px;
+padding:9px;
 border-radius:8px;
 background:#e5e7eb;
 color:#0f172a;
