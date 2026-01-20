@@ -191,7 +191,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（余白・文字サイズ調整版）
+# カード表示（高さ・余白・文字サイズ調整版）
 # =========================
 
 if filtered_df.empty:
@@ -217,9 +217,9 @@ border-left:8px solid {color};
 padding:14px;
 border-radius:12px;
 background:#ffffff;
-height:300px;
+height:260px;
 display:grid;
-grid-template-rows:68px 1fr;
+grid-template-rows:64px 1fr;
 row-gap:6px;
 margin-bottom:24px;
 ">
@@ -237,18 +237,17 @@ overflow:hidden;
 
 <div style="display:flex;flex-direction:column;">
 
-<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 4px 0;">
+<p style="font-size:14px;color:{TEXT_SUB};margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 4px 0;color:{TEXT_MAIN};font-size:15px;">
+<p style="margin:0 0 6px 0;color:{TEXT_MAIN};font-size:16px;">
 声部：
 <span style="color:{color};">
 {r['声部']}
 </span>
 </p>
 
-<div style="display:flex;flex-direction:column;gap:4px;">
 <span style="
 align-self:flex-start;
 padding:3px 9px;
@@ -256,13 +255,13 @@ border-radius:999px;
 background:#f1f5f9;
 font-size:13px;
 color:{TEXT_MAIN};
-margin-top:2px;
 ">
 {r['区分']}
 </span>
 
 <a href="{r['url']}" target="_blank"
 style="
+margin-top:8px;
 text-align:center;
 padding:8px;
 border-radius:8px;
@@ -273,7 +272,6 @@ font-weight:600;
 ">
 楽譜を開く
 </a>
-</div>
 
 </div>
 </div>
