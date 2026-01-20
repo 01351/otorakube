@@ -49,16 +49,16 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# UIカラー規則（②反映）
+# UIカラー規則
 # 混声：緑 / 男声：青
 PART_COLOR = {
-    "混声": "#16a34a",  # 緑
-    "女声": "#db2777",  # ピンク
-    "男声": "#2563eb",  # 青
-    "斉唱": "#9333ea"   # 紫
+    "混声": "#16a34a",
+    "女声": "#db2777",
+    "男声": "#2563eb",
+    "斉唱": "#9333ea"
 }
 
-TEXT_MAIN = "#0f172a"    # ダークモード対応文字色
+TEXT_MAIN = "#0f172a"
 TEXT_SUB = "#334155"
 
 # =========================
@@ -212,7 +212,7 @@ elif sort_option == "声部":
     filtered_df = filtered_df.sort_values("__order").drop(columns="__order")
 
 # =========================
-# カード表示（①③④反映）
+# カード表示（①〜④反映）
 # =========================
 
 if filtered_df.empty:
@@ -241,12 +241,13 @@ background:#ffffff;
 height:320px;
 display:flex;
 flex-direction:column;
+margin-bottom:20px;
 ">
 
-<div style="flex-grow:1;">
 <h3 style="
 margin:0 0 8px 0;
 font-size:20px;
+font-weight:700;
 color:{TEXT_MAIN};
 min-height:48px;">
 {r['曲名']}
@@ -257,8 +258,8 @@ min-height:48px;">
 </p>
 
 <p style="margin:0 0 6px 0;color:{TEXT_MAIN};">
-<strong>声部</strong>：
-<span style="color:{color};font-weight:600;">
+声部：
+<span style="color:{color};">
 {r['声部']}
 </span>
 </p>
@@ -269,14 +270,13 @@ padding:4px 10px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:12px;
-color:{TEXT_MAIN};">
+color:{TEXT_MAIN};
+margin-bottom:6px;">
 {r['区分']}
 </span>
-</div>
 
 <a href="{r['url']}" target="_blank"
 style="
-margin-top:8px;
 display:block;
 text-align:center;
 padding:10px;
