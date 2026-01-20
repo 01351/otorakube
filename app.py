@@ -49,11 +49,10 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# UIカラー
 PART_COLOR = {
-    "混声": "#16a34a",  # 緑
+    "混声": "#16a34a",
     "女声": "#db2777",
-    "男声": "#2563eb",  # 青
+    "男声": "#2563eb",
     "斉唱": "#9333ea"
 }
 
@@ -190,7 +189,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（ボタン修正済）
+# カード表示（Grid方式）
 # =========================
 
 if filtered_df.empty:
@@ -217,24 +216,26 @@ padding:16px;
 border-radius:12px;
 background:#ffffff;
 height:320px;
-display:flex;
-flex-direction:column;
+display:grid;
+grid-template-rows:72px 1fr auto;
+row-gap:8px;
 margin-bottom:24px;
 ">
 
-<!-- 上部情報 -->
-<div>
-
+<!-- 曲名（高さ完全固定） -->
 <h3 style="
-margin:0 0 8px 0;
+margin:0;
 font-size:20px;
 font-weight:700;
+line-height:1.2;
 color:{TEXT_MAIN};
-min-height:48px;
+overflow:hidden;
 ">
 {r['曲名']}
 </h3>
 
+<!-- 本文 -->
+<div>
 <p style="font-size:13px;color:{TEXT_SUB};margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
@@ -256,13 +257,11 @@ color:{TEXT_MAIN};
 ">
 {r['区分']}
 </span>
-
 </div>
 
-<!-- ボタン（必ず下に表示） -->
+<!-- ボタン（最下段・余白なし） -->
 <a href="{r['url']}" target="_blank"
 style="
-margin-top:auto;
 display:block;
 text-align:center;
 padding:10px;
