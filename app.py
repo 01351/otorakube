@@ -50,10 +50,10 @@ NUM_MAP = {
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
 # UIカラー規則
-# 混声：青（基準）
-# 女声：ピンク（明）
-# 男声：緑（落ち着き）
-# 斉唱：紫（特殊）
+# 混声：青
+# 女声：ピンク
+# 男声：緑
+# 斉唱：紫
 PART_COLOR = {
     "混声": "#2563eb",
     "女声": "#db2777",
@@ -120,13 +120,12 @@ def load_from_drive():
 df = load_from_drive()
 
 # =========================
-# 検索UI（改善①②）
+# 検索UI
 # =========================
 
 st.divider()
 st.subheader("検索")
 
-# 最重要条件（上段）
 col1, col2 = st.columns([2, 1])
 with col1:
     title_input = st.text_input("🎵 曲名（部分一致）")
@@ -136,7 +135,7 @@ with col2:
 
 st.caption("▼ 詳細条件")
 
-# 声部（全選択対応）
+# 声部
 st.markdown("**声部**")
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
@@ -150,7 +149,7 @@ for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=all_part)
 
-# 区分（全選択対応）
+# 区分
 st.markdown("**区分**")
 all_type = st.checkbox("すべて選択（区分）", value=True)
 type_cols = st.columns(len(TYPE_MAP))
@@ -184,7 +183,7 @@ filtered_df = filtered_df[
 ]
 
 # =========================
-# 検索結果UI（改善③④）
+# 検索結果
 # =========================
 
 st.divider()
@@ -200,7 +199,6 @@ with col_r:
         label_visibility="collapsed"
     )
 
-# 並び替え処理
 if sort_option == "曲名（標準）":
     filtered_df = filtered_df.sort_values("code")
 elif sort_option == "曲名（逆順）":
@@ -214,7 +212,7 @@ elif sort_option == "声部":
     filtered_df = filtered_df.sort_values("__order").drop(columns="__order")
 
 # =========================
-# カード表示
+# カード表示（HTML修正済み）
 # =========================
 
 if filtered_df.empty:
@@ -234,59 +232,54 @@ else:
 
             with col:
                 st.markdown(
-                    f"""
-                    <div style="
-                        border-left: 8px solid {color};
-                        padding: 16px;
-                        border-radius: 12px;
-                        background: #ffffff;
-                        height: 320px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: space-between;
-                    ">
-                        <div>
-                            <h3 style="margin:0 0 8px 0; font-size:20px;">
-                                {r['曲名']}
-                            </h3>
+f"""
+<div style="border-left:8px solid {color};
+padding:16px;
+border-radius:12px;
+background:#ffffff;
+height:320px;
+display:flex;
+flex-direction:column;
+justify-content:space-between;">
 
-                            <p style="font-size:13px; color:#444;">
-                                作曲者：{r['作曲者']}
-                            </p>
+<div>
+<h3 style="margin:0 0 8px 0;font-size:20px;">
+{r['曲名']}
+</h3>
 
-                            <p>
-                                <strong>声部</strong>：
-                                <span style="color:{color}; font-weight:600;">
-                                    {r['声部']}
-                                </span>
-                            </p>
+<p style="font-size:13px;color:#444;">
+作曲者：{r['作曲者']}
+</p>
 
-                            <span style="
-                                display:inline-block;
-                                padding:4px 10px;
-                                border-radius:999px;
-                                background:#f1f5f9;
-                                font-size:12px;
-                                margin-top:6px;
-                            ">
-                                {r['区分']}
-                            </span>
-                        </div>
+<p>
+<strong>声部</strong>：
+<span style="color:{color};font-weight:600;">
+{r['声部']}
+</span>
+</p>
 
-                        <a href="{r['url']}" target="_blank"
-                           style="
-                               display:block;
-                               text-align:center;
-                               padding:10px;
-                               border-radius:8px;
-                               background:#2563eb;
-                               color:white;
-                               text-decoration:none;
-                               font-weight:600;
-                           ">
-                           楽譜を開く
-                        </a>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+<span style="display:inline-block;
+padding:4px 10px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:12px;">
+{r['区分']}
+</span>
+</div>
+
+<a href="{r['url']}" target="_blank"
+style="display:block;
+text-align:center;
+padding:10px;
+border-radius:8px;
+background:#2563eb;
+color:white;
+text-decoration:none;
+font-weight:600;">
+楽譜を開く
+</a>
+
+</div>
+""",
+unsafe_allow_html=True
                 )
