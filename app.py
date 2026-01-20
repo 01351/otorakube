@@ -53,7 +53,7 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# UIカラー（ダークモード対応）
+# UIカラー
 PART_COLOR = {
     "混声": "#16a34a",  # 緑
     "女声": "#db2777",
@@ -61,15 +61,8 @@ PART_COLOR = {
     "斉唱": "#9333ea"
 }
 
-CARD_BG = "#ffffff"
-TEXT_TITLE = "#0f172a"
-TEXT_MAIN = "#1e293b"
-TEXT_SUB = "#475569"
-TEXT_MUTE = "#64748b"
-
-BUTTON_BG = "#e2e8f0"
-BUTTON_TEXT = "#0f172a"
-BUTTON_HOVER = "#cbd5e1"
+TEXT_MAIN = "#0f172a"
+TEXT_SUB = "#334155"
 
 # =========================
 # ファイル名解析
@@ -198,11 +191,10 @@ filtered_df = filtered_df[
 
 st.divider()
 st.subheader("検索結果")
-
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示
+# カード表示（ボタン修正済）
 # =========================
 
 if filtered_df.empty:
@@ -224,36 +216,34 @@ else:
                 st.markdown(
 f"""
 <div style="
-background:{CARD_BG};
 border-left:8px solid {color};
-border-radius:14px;
 padding:16px;
+border-radius:12px;
+background:#ffffff;
 height:320px;
 display:flex;
 flex-direction:column;
-justify-content:space-between;
 margin-bottom:24px;
 ">
 
+<!-- 上部情報 -->
 <div>
 
-<div style="min-height:56px; display:flex; align-items:center;">
 <h3 style="
-margin:0;
+margin:0 0 8px 0;
 font-size:20px;
 font-weight:700;
-line-height:1.3;
-color:{TEXT_TITLE};
+color:{TEXT_MAIN};
+min-height:48px;
 ">
 {r['曲名']}
 </h3>
-</div>
 
-<p style="margin:4px 0 6px 0; font-size:13px; color:{TEXT_MUTE};">
+<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 6px 0; font-size:14px; color:{TEXT_MAIN};">
+<p style="margin:0 0 6px 0;color:{TEXT_MAIN};">
 声部：
 <span style="color:{color};">
 {r['声部']}
@@ -266,29 +256,26 @@ padding:4px 10px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:12px;
-color:{TEXT_SUB};
+color:{TEXT_MAIN};
 ">
 {r['区分']}
 </span>
 
 </div>
 
+<!-- ボタン（必ず下に表示） -->
 <a href="{r['url']}" target="_blank"
 style="
+margin-top:auto;
 display:block;
 text-align:center;
-padding:9px;
+padding:10px;
 border-radius:8px;
-background:{BUTTON_BG};
-color:{BUTTON_TEXT};
+background:#e5e7eb;
+color:#0f172a;
 text-decoration:none;
-font-size:14px;
-font-weight:500;
-margin-top:6px;
-"
-onmouseover="this.style.background='{BUTTON_HOVER}'"
-onmouseout="this.style.background='{BUTTON_BG}'"
->
+font-weight:600;
+">
 楽譜を開く
 </a>
 
