@@ -189,7 +189,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（Grid方式）
+# カード表示（高さ・隙間調整版）
 # =========================
 
 if filtered_df.empty:
@@ -212,17 +212,17 @@ else:
 f"""
 <div style="
 border-left:8px solid {color};
-padding:16px;
+padding:14px;
 border-radius:12px;
 background:#ffffff;
-height:320px;
+height:300px;
 display:grid;
-grid-template-rows:72px 1fr auto;
-row-gap:8px;
+grid-template-rows:68px 1fr auto;
+row-gap:4px;
 margin-bottom:24px;
 ">
 
-<!-- 曲名（高さ完全固定） -->
+<!-- 曲名（高さ固定） -->
 <h3 style="
 margin:0;
 font-size:20px;
@@ -236,11 +236,11 @@ overflow:hidden;
 
 <!-- 本文 -->
 <div>
-<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 6px 0;">
+<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 4px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 6px 0;color:{TEXT_MAIN};">
+<p style="margin:0 0 4px 0;color:{TEXT_MAIN};">
 声部：
 <span style="color:{color};">
 {r['声部']}
@@ -249,7 +249,7 @@ overflow:hidden;
 
 <span style="
 display:inline-block;
-padding:4px 10px;
+padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:12px;
@@ -259,12 +259,12 @@ color:{TEXT_MAIN};
 </span>
 </div>
 
-<!-- ボタン（最下段・余白なし） -->
+<!-- ボタン -->
 <a href="{r['url']}" target="_blank"
 style="
 display:block;
 text-align:center;
-padding:10px;
+padding:8px;
 border-radius:8px;
 background:#e5e7eb;
 color:#0f172a;
