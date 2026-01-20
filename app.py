@@ -133,12 +133,8 @@ with col2:
 
 st.caption("▼ 詳細条件")
 
-# =========================
 # 声部
-# =========================
-
 st.markdown("**声部**")
-
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
@@ -152,12 +148,8 @@ for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
-# =========================
 # 区分
-# =========================
-
 st.markdown("**区分**")
-
 all_type = st.checkbox("すべて選択", value=True, key="all_type")
 
 type_cols = st.columns(len(TYPE_MAP))
@@ -199,7 +191,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（確定版）
+# カード表示（余白・文字サイズ調整版）
 # =========================
 
 if filtered_df.empty:
@@ -243,27 +235,28 @@ overflow:hidden;
 {r['曲名']}
 </h3>
 
-<div style="display:flex;flex-direction:column;gap:6px;">
+<div style="display:flex;flex-direction:column;">
 
-<p style="font-size:13px;color:{TEXT_SUB};margin:0;">
+<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 4px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0;color:{TEXT_MAIN};">
+<p style="margin:0 0 4px 0;color:{TEXT_MAIN};font-size:15px;">
 声部：
 <span style="color:{color};">
 {r['声部']}
 </span>
 </p>
 
-<div style="display:flex;flex-direction:column;gap:6px;">
+<div style="display:flex;flex-direction:column;gap:4px;">
 <span style="
 align-self:flex-start;
 padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
-font-size:12px;
+font-size:13px;
 color:{TEXT_MAIN};
+margin-top:2px;
 ">
 {r['区分']}
 </span>
