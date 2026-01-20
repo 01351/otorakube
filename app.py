@@ -140,7 +140,7 @@ existing_parts = sorted(
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
 
-all_part = st.checkbox("すべて選択（声部）", value=True)
+all_part = st.checkbox("すべて選択", value=True)
 part_cols = st.columns(len(existing_parts))
 part_checks = {}
 for col, part in zip(part_cols, existing_parts):
@@ -149,7 +149,7 @@ for col, part in zip(part_cols, existing_parts):
 
 # 区分
 st.markdown("**区分**")
-all_type = st.checkbox("すべて選択（区分）", value=True)
+all_type = st.checkbox("すべて選択", value=True)
 type_cols = st.columns(len(TYPE_MAP))
 type_checks = {}
 for col, t in zip(type_cols, TYPE_MAP.values()):
@@ -189,7 +189,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（高さ・隙間調整版）
+# カード表示（構造修正版）
 # =========================
 
 if filtered_df.empty:
@@ -217,12 +217,12 @@ border-radius:12px;
 background:#ffffff;
 height:300px;
 display:grid;
-grid-template-rows:68px 1fr auto;
-row-gap:4px;
+grid-template-rows:68px 1fr;
+row-gap:6px;
 margin-bottom:24px;
 ">
 
-<!-- 曲名（高さ固定） -->
+<!-- 曲名 -->
 <h3 style="
 margin:0;
 font-size:20px;
@@ -234,21 +234,23 @@ overflow:hidden;
 {r['曲名']}
 </h3>
 
-<!-- 本文 -->
-<div>
-<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 4px 0;">
+<!-- 本文＋ボタンを同一ブロックに -->
+<div style="display:flex;flex-direction:column;gap:6px;">
+
+<p style="font-size:13px;color:{TEXT_SUB};margin:0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 4px 0;color:{TEXT_MAIN};">
+<p style="margin:0;color:{TEXT_MAIN};">
 声部：
 <span style="color:{color};">
 {r['声部']}
 </span>
 </p>
 
+<div style="display:flex;flex-direction:column;gap:6px;">
 <span style="
-display:inline-block;
+align-self:flex-start;
 padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
@@ -257,12 +259,9 @@ color:{TEXT_MAIN};
 ">
 {r['区分']}
 </span>
-</div>
 
-<!-- ボタン -->
 <a href="{r['url']}" target="_blank"
 style="
-display:block;
 text-align:center;
 padding:8px;
 border-radius:8px;
@@ -273,7 +272,9 @@ font-weight:600;
 ">
 楽譜を開く
 </a>
+</div>
 
+</div>
 </div>
 """,
 unsafe_allow_html=True
