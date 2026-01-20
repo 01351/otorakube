@@ -49,17 +49,17 @@ NUM_MAP = {
 
 PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
-# UIカラー規則
-# 混声：青
-# 女声：ピンク
-# 男声：緑
-# 斉唱：紫
+# UIカラー規則（②反映）
+# 混声：緑 / 男声：青
 PART_COLOR = {
-    "混声": "#2563eb",
-    "女声": "#db2777",
-    "男声": "#16a34a",
-    "斉唱": "#9333ea"
+    "混声": "#16a34a",  # 緑
+    "女声": "#db2777",  # ピンク
+    "男声": "#2563eb",  # 青
+    "斉唱": "#9333ea"   # 紫
 }
+
+TEXT_MAIN = "#0f172a"    # ダークモード対応文字色
+TEXT_SUB = "#334155"
 
 # =========================
 # ファイル名解析
@@ -212,7 +212,7 @@ elif sort_option == "声部":
     filtered_df = filtered_df.sort_values("__order").drop(columns="__order")
 
 # =========================
-# カード表示（HTML修正済み）
+# カード表示（①③④反映）
 # =========================
 
 if filtered_df.empty:
@@ -228,52 +228,61 @@ else:
         cols = st.columns(len(row_df))
         for col, (_, r) in zip(cols, row_df.iterrows()):
             base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-            color = PART_COLOR.get(base_part, "#666666")
+            color = PART_COLOR.get(base_part, "#64748b")
 
             with col:
                 st.markdown(
 f"""
-<div style="border-left:8px solid {color};
+<div style="
+border-left:8px solid {color};
 padding:16px;
 border-radius:12px;
 background:#ffffff;
 height:320px;
 display:flex;
 flex-direction:column;
-justify-content:space-between;">
+">
 
-<div>
-<h3 style="margin:0 0 8px 0;font-size:20px;">
+<div style="flex-grow:1;">
+<h3 style="
+margin:0 0 8px 0;
+font-size:20px;
+color:{TEXT_MAIN};
+min-height:48px;">
 {r['曲名']}
 </h3>
 
-<p style="font-size:13px;color:#444;">
+<p style="font-size:13px;color:{TEXT_SUB};margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p>
+<p style="margin:0 0 6px 0;color:{TEXT_MAIN};">
 <strong>声部</strong>：
 <span style="color:{color};font-weight:600;">
 {r['声部']}
 </span>
 </p>
 
-<span style="display:inline-block;
+<span style="
+display:inline-block;
 padding:4px 10px;
 border-radius:999px;
 background:#f1f5f9;
-font-size:12px;">
+font-size:12px;
+color:{TEXT_MAIN};">
 {r['区分']}
 </span>
 </div>
 
 <a href="{r['url']}" target="_blank"
-style="display:block;
+style="
+margin-top:8px;
+display:block;
 text-align:center;
 padding:10px;
 border-radius:8px;
 background:#2563eb;
-color:white;
+color:#ffffff;
 text-decoration:none;
 font-weight:600;">
 楽譜を開く
