@@ -2,6 +2,7 @@
 #Driveにファイルがないときは0件と表示できるように
 #「作曲者」を作曲・編曲者に
 #カードの「声　部」を「声部」に
+#検索の区分の並びを二部→三部→四部の順に
 
 import streamlit as st
 import pandas as pd
