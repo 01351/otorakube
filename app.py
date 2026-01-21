@@ -1,3 +1,5 @@
+#区分もDriveのファイル情報から直接読み取れるように
+
 import streamlit as st
 import pandas as pd
 import re
