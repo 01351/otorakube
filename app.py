@@ -56,8 +56,7 @@ PART_COLOR = {
     "斉唱": "#9333ea"
 }
 
-TEXT_MAIN = "#0f172a"
-TEXT_SUB = "#334155"
+TEXT_COLOR = "#0f172a"
 
 # =========================
 # ファイル名解析
@@ -191,7 +190,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（最終微調整版）
+# カード表示（幅固定・色統一・最終版）
 # =========================
 
 if filtered_df.empty:
@@ -204,12 +203,19 @@ else:
     ]
 
     for row_df in rows:
-        cols = st.columns(len(row_df))
-        for col, (_, r) in zip(cols, row_df.iterrows()):
+        cols = st.columns(cards_per_row)
+
+        for i in range(cards_per_row):
+            if i >= len(row_df):
+                with cols[i]:
+                    st.empty()
+                continue
+
+            r = row_df.iloc[i]
             base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
             color = PART_COLOR.get(base_part, "#64748b")
 
-            with col:
+            with cols[i]:
                 st.markdown(
 f"""
 <div style="
@@ -222,6 +228,7 @@ display:grid;
 grid-template-rows:64px 1fr;
 row-gap:6px;
 margin-bottom:24px;
+color:{TEXT_COLOR};
 ">
 
 <h3 style="
@@ -229,7 +236,6 @@ margin:0;
 font-size:20px;
 font-weight:700;
 line-height:1.2;
-color:{TEXT_MAIN};
 overflow:hidden;
 ">
 {r['曲名']}
@@ -237,12 +243,12 @@ overflow:hidden;
 
 <div style="display:flex;flex-direction:column;">
 
-<p style="font-size:16px;color:{TEXT_SUB};margin:0 0 6px 0;">
+<p style="font-size:16px;margin:0 0 6px 0;">
 作曲者：{r['作曲者']}
 </p>
 
-<p style="margin:0 0 6px 0;color:{TEXT_MAIN};font-size:16px;">
-声部：
+<p style="margin:0 0 6px 0;font-size:16px;">
+声　部：
 <span style="color:{color};">
 {r['声部']}
 </span>
@@ -254,7 +260,6 @@ padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:13px;
-color:{TEXT_MAIN};
 ">
 {r['区分']}
 </span>
@@ -263,15 +268,18 @@ color:{TEXT_MAIN};
 style="
 display:block;
 width:90%;
-margin:12px auto 0 auto;
+margin:14px auto 0 auto;
 text-align:center;
 padding:9px;
 border-radius:8px;
 background:#e5e7eb;
-color:#0f172a;
+color:{TEXT_COLOR};
 text-decoration:none;
 font-weight:600;
-">
+"
+onmousedown="this.style.background='#c7d2fe'"
+onmouseup="this.style.background='#e5e7eb'"
+>
 楽譜を開く
 </a>
 
