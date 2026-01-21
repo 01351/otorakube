@@ -1,5 +1,7 @@
 #区分もDriveのファイル情報から直接読み取れるように
 #Driveにファイルがないときは0件と表示できるように
+#「作曲者」を作曲・編曲者に
+#カードの「声　部」を「声部」に
 
 import streamlit as st
 import pandas as pd
