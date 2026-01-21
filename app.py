@@ -132,7 +132,6 @@ with col2:
 
 st.caption("▼ 詳細条件")
 
-# 声部
 st.markdown("**声部**")
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
@@ -147,7 +146,6 @@ for col, part in zip(part_cols, existing_parts):
     with col:
         part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
-# 区分
 st.markdown("**区分**")
 all_type = st.checkbox("すべて選択", value=True, key="all_type")
 
@@ -190,7 +188,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 # =========================
-# カード表示（幅固定・色統一・最終版）
+# カード表示（修正版）
 # =========================
 
 if filtered_df.empty:
@@ -231,13 +229,7 @@ margin-bottom:24px;
 color:{TEXT_COLOR};
 ">
 
-<h3 style="
-margin:0;
-font-size:20px;
-font-weight:700;
-line-height:1.2;
-overflow:hidden;
-">
+<h3 style="margin:0;font-size:20px;font-weight:700;line-height:1.2;">
 {r['曲名']}
 </h3>
 
@@ -248,10 +240,7 @@ overflow:hidden;
 </p>
 
 <p style="margin:0 0 6px 0;font-size:16px;">
-声　部：
-<span style="color:{color};">
-{r['声部']}
-</span>
+声　部：<span style="color:{color};">{r['声部']}</span>
 </p>
 
 <span style="
@@ -264,22 +253,9 @@ font-size:13px;
 {r['区分']}
 </span>
 
-<a href="{r['url']}" target="_blank"
-style="
-display:block;
-width:90%;
-margin:14px auto 0 auto;
-text-align:center;
-padding:9px;
-border-radius:8px;
-background:#e5e7eb;
-color:{TEXT_COLOR};
-text-decoration:none;
-font-weight:600;
-"
+<a href="{r['url']}" target="_blank" style="display:block;width:90%;margin:14px auto 0 auto;text-align:center;padding:9px;border-radius:8px;background:#e5e7eb;color:{TEXT_COLOR};text-decoration:none;font-weight:600;"
 onmousedown="this.style.background='#c7d2fe'"
-onmouseup="this.style.background='#e5e7eb'"
->
+onmouseup="this.style.background='#e5e7eb'">
 楽譜を開く
 </a>
 
