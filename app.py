@@ -117,105 +117,45 @@ def load_from_drive():
 df = load_from_drive()
 
 # =========================
-# 検索UI
-# =========================
-
-st.divider()
-st.subheader("検索")
-
-col1, col2 = st.columns([2, 1])
-with col1:
-    title_input = st.text_input("🎵 曲名（部分一致）")
-with col2:
-    composer_list = sorted(df["作曲者"].dropna().unique().tolist())
-    composer_input = st.selectbox("👤 作曲者", ["指定しない"] + composer_list)
-
-st.caption("▼ 詳細条件")
-
-st.markdown("**声部**")
-existing_parts = sorted(
-    df["声部"].dropna().unique().tolist(),
-    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-)
-
-all_part = st.checkbox("すべて選択", value=True, key="all_part")
-
-part_cols = st.columns(len(existing_parts))
-part_checks = {}
-for col, part in zip(part_cols, existing_parts):
-    with col:
-        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
-
-st.markdown("**区分**")
-all_type = st.checkbox("すべて選択", value=True, key="all_type")
-
-type_cols = st.columns(len(TYPE_MAP))
-type_checks = {}
-for col, t in zip(type_cols, TYPE_MAP.values()):
-    with col:
-        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
-
-# =========================
-# 検索処理
-# =========================
-
-filtered_df = df.copy()
-
-if title_input:
-    filtered_df = filtered_df[
-        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
-    ]
-
-if composer_input != "指定しない":
-    filtered_df = filtered_df[
-        filtered_df["作曲者"] == composer_input
-    ]
-
-filtered_df = filtered_df[
-    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
-]
-
-filtered_df = filtered_df[
-    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
-]
-
-# =========================
 # 検索結果
 # =========================
 
 st.divider()
 st.subheader("検索結果")
-st.write(f"{len(filtered_df)} 件")
+st.write(f"{len(df)} 件")
 
 # =========================
-# カード表示（修正版）
+# カード表示（最終安定版）
 # =========================
 
-if filtered_df.empty:
-    st.info("該当する楽譜がありません")
-else:
-    cards_per_row = 3
-    rows = [
-        filtered_df.iloc[i:i + cards_per_row]
-        for i in range(0, len(filtered_df), cards_per_row)
-    ]
+cards_per_row = 3
+rows = [
+    df.iloc[i:i + cards_per_row]
+    for i in range(0, len(df), cards_per_row)
+]
 
-    for row_df in rows:
-        cols = st.columns(cards_per_row)
+for row_df in rows:
+    cols = st.columns(cards_per_row)
 
-        for i in range(cards_per_row):
-            if i >= len(row_df):
-                with cols[i]:
-                    st.empty()
-                continue
-
-            r = row_df.iloc[i]
-            base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-            color = PART_COLOR.get(base_part, "#64748b")
-
+    for i in range(cards_per_row):
+        if i >= len(row_df):
             with cols[i]:
-                st.markdown(
+                st.empty()
+            continue
+
+        r = row_df.iloc[i]
+        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+        color = PART_COLOR.get(base_part, "#64748b")
+
+        with cols[i]:
+            st.markdown(
 f"""
+<style>
+.score-btn:active {{
+  background:#c7d2fe !important;
+}}
+</style>
+
 <div style="
 border-left:8px solid {color};
 padding:14px;
@@ -223,15 +163,30 @@ border-radius:12px;
 background:#ffffff;
 height:260px;
 display:grid;
-grid-template-rows:64px 1fr;
+grid-template-rows:72px 1fr;
 row-gap:6px;
 margin-bottom:24px;
 color:{TEXT_COLOR};
 ">
 
-<h3 style="margin:0;font-size:20px;font-weight:700;line-height:1.2;">
+<div style="
+display:flex;
+align-items:center;
+min-height:72px;
+">
+<h3 style="
+margin:0;
+font-size:20px;
+font-weight:700;
+line-height:1.2;
+overflow:hidden;
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+">
 {r['曲名']}
 </h3>
+</div>
 
 <div style="display:flex;flex-direction:column;">
 
@@ -249,13 +204,25 @@ padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:13px;
+margin-bottom:4px;
 ">
 {r['区分']}
 </span>
 
-<a href="{r['url']}" target="_blank" style="display:block;width:90%;margin:14px auto 0 auto;text-align:center;padding:9px;border-radius:8px;background:#e5e7eb;color:{TEXT_COLOR};text-decoration:none;font-weight:600;"
-onmousedown="this.style.background='#c7d2fe'"
-onmouseup="this.style.background='#e5e7eb'">
+<a href="{r['url']}" target="_blank"
+class="score-btn"
+style="
+display:block;
+width:90%;
+margin:12px auto 0 auto;
+text-align:center;
+padding:9px;
+border-radius:8px;
+background:#e5e7eb;
+color:{TEXT_COLOR};
+text-decoration:none;
+font-weight:600;
+">
 楽譜を開く
 </a>
 
@@ -263,4 +230,4 @@ onmouseup="this.style.background='#e5e7eb'">
 </div>
 """,
 unsafe_allow_html=True
-                )
+            )
