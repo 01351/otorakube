@@ -1,4 +1,5 @@
 #区分もDriveのファイル情報から直接読み取れるように
+#Driveにファイルがないときは0件と表示できるように
 
 import streamlit as st
 import pandas as pd
