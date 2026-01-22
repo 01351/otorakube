@@ -141,7 +141,7 @@ with col2:
 st.caption("▼ 詳細条件")
 
 # =========================
-# 声部（すべて選択 完全対応）
+# 声部（初期すべてON）
 # =========================
 
 st.markdown("**声部**")
@@ -150,6 +150,13 @@ existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
+
+# 初期化
+if "initialized_part" not in st.session_state:
+    st.session_state["all_part"] = True
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = True
+    st.session_state["initialized_part"] = True
 
 def toggle_all_part():
     for p in existing_parts:
@@ -160,12 +167,7 @@ def sync_all_part():
         st.session_state.get(f"part_{p}", False) for p in existing_parts
     )
 
-st.checkbox(
-    "すべて選択",
-    key="all_part",
-    value=True,
-    on_change=toggle_all_part
-)
+st.checkbox("すべて選択", key="all_part", on_change=toggle_all_part)
 
 part_cols = st.columns(len(existing_parts))
 part_checks = {}
@@ -179,12 +181,17 @@ for col, part in zip(part_cols, existing_parts):
         )
 
 # =========================
-# 区分（すべて選択 完全対応）
+# 区分（初期すべてON）
 # =========================
 
 st.markdown("**区分**")
-
 type_labels = list(TYPE_MAP.values())
+
+if "initialized_type" not in st.session_state:
+    st.session_state["all_type"] = True
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = True
+    st.session_state["initialized_type"] = True
 
 def toggle_all_type():
     for t in type_labels:
@@ -195,12 +202,7 @@ def sync_all_type():
         st.session_state.get(f"type_{t}", False) for t in type_labels
     )
 
-st.checkbox(
-    "すべて選択",
-    key="all_type",
-    value=True,
-    on_change=toggle_all_type
-)
+st.checkbox("すべて選択", key="all_type", on_change=toggle_all_type)
 
 type_cols = st.columns(len(type_labels))
 type_checks = {}
