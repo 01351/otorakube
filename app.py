@@ -43,6 +43,21 @@ TYPE_MAP = {
     "D": "特殊"
 }
 
+PART_BASE_MAP = {
+    "G": "混声",
+    "F": "女声",
+    "M": "男声",
+    "U": "斉唱"
+}
+
+NUM_MAP = {
+    "2": "二部",
+    "3": "三部",
+    "4": "四部"
+}
+
+PART_ORDER = ["混声", "女声", "男声", "斉唱"]
+
 PART_COLOR = {
     "混声": "#16a34a",
     "女声": "#db2777",
@@ -50,12 +65,10 @@ PART_COLOR = {
     "斉唱": "#9333ea"
 }
 
-PART_ORDER = ["混声", "女声", "男声", "斉唱"]
-
 TEXT_COLOR = "#0f172a"
 
 # =========================
-# ファイル名解析（フォールバック用）
+# ファイル名解析（区分コード使用）
 # =========================
 
 def parse_filename(filename):
@@ -67,10 +80,10 @@ def parse_filename(filename):
     code, title, t, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
-    base_map = {"G": "混声", "F": "女声", "M": "男声", "U": "斉唱"}
-    num_map = {"2": "二部", "3": "三部", "4": "四部"}
-
-    part = base_map.get(p, "") + num_map.get(n, "")
+    if p == "U":
+        part = "斉唱"
+    else:
+        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
 
     return {
         "code": code,
@@ -79,27 +92,6 @@ def parse_filename(filename):
         "声部": part,
         "区分": TYPE_MAP.get(t, "不明")
     }
-
-# =========================
-# Drive description 解析
-# =========================
-
-def parse_description(desc: str):
-    """
-    description から 区分 / 声部 を取得
-    """
-    result = {}
-    if not desc:
-        return result
-
-    for line in desc.splitlines():
-        if "区分=" in line:
-            code = line.replace("区分=", "").strip()
-            result["区分"] = TYPE_MAP.get(code, code)
-        if "声部=" in line:
-            result["声部"] = line.replace("声部=", "").strip()
-
-    return result
 
 # =========================
 # Google Drive 読み込み
@@ -116,25 +108,14 @@ def load_from_drive():
 
     results = service.files().list(
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, description, webViewLink)"
+        fields="files(name, webViewLink)"
     ).execute()
 
     rows = []
     for f in results.get("files", []):
-        base = parse_filename(f["name"])
-        if not base:
-            continue
-
-        desc_data = parse_description(f.get("description", ""))
-
-        rows.append({
-            "code": base["code"],
-            "曲名": base["曲名"],
-            "作曲・編曲者": base["作曲・編曲者"],
-            "声部": desc_data.get("声部", base["声部"]),
-            "区分": desc_data.get("区分", base["区分"]),
-            "url": f["webViewLink"]
-        })
+        parsed = parse_filename(f["name"])
+        if parsed:
+            rows.append({**parsed, "url": f["webViewLink"]})
 
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -167,22 +148,23 @@ existing_parts = sorted(
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
 
-all_part = st.checkbox("すべて選択", value=True)
+all_part = st.checkbox("すべて選択", value=True, key="all_part")
+
 part_cols = st.columns(len(existing_parts))
-part_checks = {
-    part: part_cols[i].checkbox(part, value=all_part)
-    for i, part in enumerate(existing_parts)
-}
+part_checks = {}
+for col, part in zip(part_cols, existing_parts):
+    with col:
+        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
 # 区分
 st.markdown("**区分**")
-all_type = st.checkbox("すべて選択", value=True)
-type_values = sorted(df["区分"].dropna().unique().tolist())
-type_cols = st.columns(len(type_values))
-type_checks = {
-    t: type_cols[i].checkbox(t, value=all_type)
-    for i, t in enumerate(type_values)
-}
+all_type = st.checkbox("すべて選択", value=True, key="all_type")
+
+type_cols = st.columns(len(TYPE_MAP))
+type_checks = {}
+for col, t in zip(type_cols, TYPE_MAP.values()):
+    with col:
+        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
 
 # =========================
 # 検索処理
@@ -191,17 +173,21 @@ type_checks = {
 filtered_df = df.copy()
 
 if title_input:
-    filtered_df = filtered_df[filtered_df["曲名"].str.contains(title_input, case=False)]
+    filtered_df = filtered_df[
+        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+    ]
 
 if composer_input != "指定しない":
-    filtered_df = filtered_df[filtered_df["作曲・編曲者"] == composer_input]
+    filtered_df = filtered_df[
+        filtered_df["作曲・編曲者"] == composer_input
+    ]
 
 filtered_df = filtered_df[
-    filtered_df["声部"].isin([k for k, v in part_checks.items() if v])
+    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
 ]
 
 filtered_df = filtered_df[
-    filtered_df["区分"].isin([k for k, v in type_checks.items() if v])
+    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
 ]
 
 # =========================
@@ -213,21 +199,25 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 if filtered_df.empty:
-    st.info("該当する楽譜がありません")
+    st.info("Drive に楽譜ファイルがありません")
 
 # =========================
 # カード表示
 # =========================
 
 cards_per_row = 3
-rows = [filtered_df.iloc[i:i + cards_per_row] for i in range(0, len(filtered_df), cards_per_row)]
+rows = [
+    filtered_df.iloc[i:i + cards_per_row]
+    for i in range(0, len(filtered_df), cards_per_row)
+]
 
 for row_df in rows:
     cols = st.columns(cards_per_row)
 
     for i in range(cards_per_row):
         if i >= len(row_df):
-            cols[i].empty()
+            with cols[i]:
+                st.empty()
             continue
 
         r = row_df.iloc[i]
@@ -238,7 +228,9 @@ for row_df in rows:
             st.markdown(
 f"""
 <style>
-.score-btn:active {{ background:#c7d2fe !important; }}
+.score-btn:active {{
+  background:#c7d2fe !important;
+}}
 </style>
 
 <div style="
@@ -269,16 +261,33 @@ overflow:hidden;
 </h3>
 </div>
 
-<p style="font-size:16px;margin:0;">作曲・編曲者：{r['作曲・編曲者']}</p>
-<p style="font-size:16px;margin:0;">声　部：<span style="color:{color};">{r['声部']}</span></p>
-<span style="font-size:13px;margin:4px 0;">{r['区分']}</span>
+<div style="display:flex;flex-direction:column;">
+
+<p style="font-size:16px;margin:0 0 6px 0;">
+作曲・編曲者：{r['作曲・編曲者']}
+</p>
+
+<p style="margin:0 0 6px 0;font-size:16px;">
+声　部：<span style="color:{color};">{r['声部']}</span>
+</p>
+
+<span style="
+align-self:flex-start;
+padding:3px 9px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:13px;
+margin-bottom:4px;
+">
+{r['区分']}
+</span>
 
 <a href="{r['url']}" target="_blank"
 class="score-btn"
 style="
 display:block;
 width:90%;
-margin:12px auto 0;
+margin:12px auto 0 auto;
 text-align:center;
 padding:9px;
 border-radius:8px;
@@ -289,6 +298,8 @@ font-weight:600;
 ">
 楽譜を開く
 </a>
+
+</div>
 </div>
 """,
 unsafe_allow_html=True
