@@ -69,7 +69,7 @@ PART_COLOR = {
 TEXT_COLOR = "#0f172a"
 
 # =========================
-# ファイル名解析（※区分コードは読み飛ばす）
+# ファイル名解析（区分コード使用）
 # =========================
 
 def parse_filename(filename):
@@ -78,7 +78,7 @@ def parse_filename(filename):
     if not m:
         return None
 
-    code, title, _, p, n, composer = m.groups()
+    code, title, t, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
     if p == "U":
@@ -90,7 +90,8 @@ def parse_filename(filename):
         "code": code,
         "曲名": title.strip(),
         "作曲・編曲者": composer,
-        "声部": part
+        "声部": part,
+        "区分": TYPE_MAP.get(t, "不明")
     }
 
 # =========================
@@ -108,23 +109,14 @@ def load_from_drive():
 
     results = service.files().list(
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink, description)"
+        fields="files(name, webViewLink)"
     ).execute()
 
     rows = []
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
-        if not parsed:
-            continue
-
-        desc = (f.get("description") or "").strip()
-        kubun = TYPE_MAP.get(desc, "未分類")
-
-        rows.append({
-            **parsed,
-            "区分": kubun,
-            "url": f["webViewLink"]
-        })
+        if parsed:
+            rows.append({**parsed, "url": f["webViewLink"]})
 
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -208,7 +200,7 @@ st.subheader("検索結果")
 st.write(f"{len(filtered_df)} 件")
 
 if filtered_df.empty:
-    st.info("該当する楽譜がありません")
+    st.info("Drive に楽譜ファイルがありません")
 
 # =========================
 # カード表示
@@ -255,7 +247,7 @@ margin-bottom:24px;
 color:{TEXT_COLOR};
 ">
 
-<div style="display:flex;align-items:center;min-height:72px;">
+<div style="display:flex;align-items:center;">
 <h3 style="
 margin:0;
 font-size:20px;
