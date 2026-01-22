@@ -69,16 +69,16 @@ PART_COLOR = {
 TEXT_COLOR = "#0f172a"
 
 # =========================
-# ファイル名解析
+# ファイル名解析（区分は含めない）
 # =========================
 
 def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
+    pattern = r"^(\d{2})(.+?)-([GFMU])([234]?)(.+)\.pdf$"
     m = re.match(pattern, filename)
     if not m:
         return None
 
-    code, title, t, p, n, composer = m.groups()
+    code, title, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
     if p == "U":
@@ -89,9 +89,8 @@ def parse_filename(filename):
     return {
         "code": code,
         "曲名": title.strip(),
-        "作曲者": composer,
-        "声部": part,
-        "区分": TYPE_MAP[t]
+        "作曲・編曲者": composer,
+        "声部": part
     }
 
 # =========================
@@ -109,14 +108,23 @@ def load_from_drive():
 
     results = service.files().list(
         q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
+        fields="files(name, webViewLink, description)"
     ).execute()
 
     rows = []
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+        if not parsed:
+            continue
+
+        type_code = (f.get("description") or "").strip()
+        type_name = TYPE_MAP.get(type_code, "未分類")
+
+        rows.append({
+            **parsed,
+            "区分": type_name,
+            "url": f["webViewLink"]
+        })
 
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -127,103 +135,108 @@ def load_from_drive():
 df = load_from_drive()
 
 # =========================
-# 検索UI（← ここが消えていた）
+# 検索UI
 # =========================
 
 st.divider()
 st.subheader("検索")
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    title_input = st.text_input("🎵 曲名（部分一致）")
-with col2:
-    composer_list = sorted(df["作曲者"].dropna().unique().tolist())
-    composer_input = st.selectbox("👤 作曲者", ["指定しない"] + composer_list)
+if df.empty:
+    st.info("Drive に楽譜ファイルがありません")
+else:
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        title_input = st.text_input("🎵 曲名（部分一致）")
+    with col2:
+        composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
+        composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list)
 
-st.caption("▼ 詳細条件")
+    st.caption("▼ 詳細条件")
 
-# 声部
-st.markdown("**声部**")
-existing_parts = sorted(
-    df["声部"].dropna().unique().tolist(),
-    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-)
+    # 声部
+    st.markdown("**声部**")
+    existing_parts = sorted(
+        df["声部"].dropna().unique().tolist(),
+        key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
+    )
 
-all_part = st.checkbox("すべて選択", value=True, key="all_part")
+    all_part = st.checkbox("すべて選択", value=True, key="all_part")
 
-part_cols = st.columns(len(existing_parts))
-part_checks = {}
-for col, part in zip(part_cols, existing_parts):
-    with col:
-        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
+    part_cols = st.columns(len(existing_parts))
+    part_checks = {}
+    for col, part in zip(part_cols, existing_parts):
+        with col:
+            part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
-# 区分
-st.markdown("**区分**")
-all_type = st.checkbox("すべて選択", value=True, key="all_type")
+    # 区分
+    st.markdown("**区分**")
+    type_values = sorted(df["区分"].unique().tolist())
 
-type_cols = st.columns(len(TYPE_MAP))
-type_checks = {}
-for col, t in zip(type_cols, TYPE_MAP.values()):
-    with col:
-        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
+    all_type = st.checkbox("すべて選択", value=True, key="all_type")
 
-# =========================
-# 検索処理
-# =========================
+    type_cols = st.columns(len(type_values))
+    type_checks = {}
+    for col, t in zip(type_cols, type_values):
+        with col:
+            type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
 
-filtered_df = df.copy()
+    # =========================
+    # 検索処理
+    # =========================
 
-if title_input:
+    filtered_df = df.copy()
+
+    if title_input:
+        filtered_df = filtered_df[
+            filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+        ]
+
+    if composer_input != "指定しない":
+        filtered_df = filtered_df[
+            filtered_df["作曲・編曲者"] == composer_input
+        ]
+
     filtered_df = filtered_df[
-        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+        filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
     ]
 
-if composer_input != "指定しない":
     filtered_df = filtered_df[
-        filtered_df["作曲者"] == composer_input
+        filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
     ]
 
-filtered_df = filtered_df[
-    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
-]
+    # =========================
+    # 検索結果
+    # =========================
 
-filtered_df = filtered_df[
-    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
-]
+    st.divider()
+    st.subheader("検索結果")
+    st.write(f"{len(filtered_df)} 件")
 
-# =========================
-# 検索結果
-# =========================
+    # =========================
+    # カード表示
+    # =========================
 
-st.divider()
-st.subheader("検索結果")
-st.write(f"{len(filtered_df)} 件")
+    cards_per_row = 3
+    rows = [
+        filtered_df.iloc[i:i + cards_per_row]
+        for i in range(0, len(filtered_df), cards_per_row)
+    ]
 
-# =========================
-# カード表示（最終安定版）
-# =========================
+    for row_df in rows:
+        cols = st.columns(cards_per_row)
 
-cards_per_row = 3
-rows = [
-    filtered_df.iloc[i:i + cards_per_row]
-    for i in range(0, len(filtered_df), cards_per_row)
-]
+        for i in range(cards_per_row):
+            if i >= len(row_df):
+                with cols[i]:
+                    st.empty()
+                continue
 
-for row_df in rows:
-    cols = st.columns(cards_per_row)
+            r = row_df.iloc[i]
+            base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+            color = PART_COLOR.get(base_part, "#64748b")
 
-    for i in range(cards_per_row):
-        if i >= len(row_df):
             with cols[i]:
-                st.empty()
-            continue
-
-        r = row_df.iloc[i]
-        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-        color = PART_COLOR.get(base_part, "#64748b")
-
-        with cols[i]:
-            st.markdown(
+                st.markdown(
 f"""
 <style>
 .score-btn:active {{
@@ -262,7 +275,7 @@ overflow:hidden;
 <div style="display:flex;flex-direction:column;">
 
 <p style="font-size:16px;margin:0 0 6px 0;">
-作曲者：{r['作曲者']}
+作曲・編曲者：{r['作曲・編曲者']}
 </p>
 
 <p style="margin:0 0 6px 0;font-size:16px;">
@@ -285,7 +298,7 @@ class="score-btn"
 style="
 display:block;
 width:90%;
-margin:12px auto 0 auto;
+margin:14px auto 0 auto;
 text-align:center;
 padding:9px;
 border-radius:8px;
@@ -301,4 +314,4 @@ font-weight:600;
 </div>
 """,
 unsafe_allow_html=True
-            )
+                )
