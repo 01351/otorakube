@@ -1,6 +1,5 @@
 #区分もDriveのファイル情報から直接読み取れるように
 #Driveにファイルがないときは0件と表示できるように
-#カードの「声　部」を「声部」に
 #検索の区分の並びを二部→三部→四部の順に
 #すべて選択を反映させる
 #区分がPの場合、区分名は「ピアノ」で声部は「なし」命名規則も声部は飛ばして作曲者を読みとる
@@ -68,7 +67,7 @@ PART_COLOR = {
 TEXT_COLOR = "#0f172a"
 
 # =========================
-# ファイル名解析（区分コード使用）
+# ファイル名解析
 # =========================
 
 def parse_filename(filename):
@@ -141,30 +140,78 @@ with col2:
 
 st.caption("▼ 詳細条件")
 
-# 声部
+# =========================
+# 声部（すべて選択 完全対応）
+# =========================
+
 st.markdown("**声部**")
+
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
 )
 
-all_part = st.checkbox("すべて選択", value=True, key="all_part")
+def toggle_all_part():
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = st.session_state["all_part"]
+
+def sync_all_part():
+    st.session_state["all_part"] = all(
+        st.session_state.get(f"part_{p}", False) for p in existing_parts
+    )
+
+st.checkbox(
+    "すべて選択",
+    key="all_part",
+    value=True,
+    on_change=toggle_all_part
+)
 
 part_cols = st.columns(len(existing_parts))
 part_checks = {}
+
 for col, part in zip(part_cols, existing_parts):
     with col:
-        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
+        part_checks[part] = st.checkbox(
+            part,
+            key=f"part_{part}",
+            on_change=sync_all_part
+        )
 
-# 区分
+# =========================
+# 区分（すべて選択 完全対応）
+# =========================
+
 st.markdown("**区分**")
-all_type = st.checkbox("すべて選択", value=True, key="all_type")
 
-type_cols = st.columns(len(TYPE_MAP))
+type_labels = list(TYPE_MAP.values())
+
+def toggle_all_type():
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = st.session_state["all_type"]
+
+def sync_all_type():
+    st.session_state["all_type"] = all(
+        st.session_state.get(f"type_{t}", False) for t in type_labels
+    )
+
+st.checkbox(
+    "すべて選択",
+    key="all_type",
+    value=True,
+    on_change=toggle_all_type
+)
+
+type_cols = st.columns(len(type_labels))
 type_checks = {}
-for col, t in zip(type_cols, TYPE_MAP.values()):
+
+for col, t in zip(type_cols, type_labels):
     with col:
-        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
+        type_checks[t] = st.checkbox(
+            t,
+            key=f"type_{t}",
+            on_change=sync_all_type
+        )
 
 # =========================
 # 検索処理
