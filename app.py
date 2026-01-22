@@ -1,7 +1,6 @@
 #区分もDriveのファイル情報から直接読み取れるように
 #Driveにファイルがないときは0件と表示できるように
 #検索の区分の並びを二部→三部→四部の順に
-#すべて選択を反映させる
 #区分がPの場合、区分名は「ピアノ」で声部は「なし」命名規則も声部は飛ばして作曲者を読みとる
 #作曲者はサイト内にふりがなの入力リストを作って、新規の作曲者も追加できるように
 #検索の作曲者は五十音順に並び替え、リストにない作曲者は上に表示
@@ -54,8 +53,6 @@ NUM_MAP = {
     "3": "三部",
     "4": "四部"
 }
-
-PART_ORDER = ["混声", "女声", "男声", "斉唱"]
 
 PART_COLOR = {
     "混声": "#16a34a",
@@ -141,17 +138,28 @@ with col2:
 st.caption("▼ 詳細条件")
 
 # =========================
-# 声部（初期すべてON）
+# 声部（並び順制御）
 # =========================
 
 st.markdown("**声部**")
 
+def part_sort_key(part):
+    base = re.sub(r"(二部|三部|四部)", "", part)
+    num = re.search(r"(二部|三部|四部)", part)
+
+    base_order = ["混声", "女声", "男声", "斉唱"]
+    num_order = ["二部", "三部", "四部"]
+
+    base_idx = base_order.index(base) if base in base_order else 99
+    num_idx = num_order.index(num.group()) if num else 99
+
+    return (base_idx, num_idx)
+
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
-    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
+    key=part_sort_key
 )
 
-# 初期化
 if "initialized_part" not in st.session_state:
     st.session_state["all_part"] = True
     for p in existing_parts:
