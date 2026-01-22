@@ -69,16 +69,16 @@ PART_COLOR = {
 TEXT_COLOR = "#0f172a"
 
 # =========================
-# ファイル名解析（区分は含めない）
+# ファイル名解析（※区分コードは読み飛ばす）
 # =========================
 
 def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([GFMU])([234]?)(.+)\.pdf$"
+    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
     m = re.match(pattern, filename)
     if not m:
         return None
 
-    code, title, p, n, composer = m.groups()
+    code, title, _, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
     if p == "U":
@@ -117,12 +117,12 @@ def load_from_drive():
         if not parsed:
             continue
 
-        type_code = (f.get("description") or "").strip()
-        type_name = TYPE_MAP.get(type_code, "未分類")
+        desc = (f.get("description") or "").strip()
+        kubun = TYPE_MAP.get(desc, "未分類")
 
         rows.append({
             **parsed,
-            "区分": type_name,
+            "区分": kubun,
             "url": f["webViewLink"]
         })
 
@@ -141,102 +141,100 @@ df = load_from_drive()
 st.divider()
 st.subheader("検索")
 
-if df.empty:
-    st.info("Drive に楽譜ファイルがありません")
-else:
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        title_input = st.text_input("🎵 曲名（部分一致）")
-    with col2:
-        composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
-        composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list)
+col1, col2 = st.columns([2, 1])
+with col1:
+    title_input = st.text_input("🎵 曲名（部分一致）")
+with col2:
+    composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
+    composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list)
 
-    st.caption("▼ 詳細条件")
+st.caption("▼ 詳細条件")
 
-    # 声部
-    st.markdown("**声部**")
-    existing_parts = sorted(
-        df["声部"].dropna().unique().tolist(),
-        key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
-    )
+# 声部
+st.markdown("**声部**")
+existing_parts = sorted(
+    df["声部"].dropna().unique().tolist(),
+    key=lambda x: PART_ORDER.index(re.sub(r"(二部|三部|四部)", "", x))
+)
 
-    all_part = st.checkbox("すべて選択", value=True, key="all_part")
+all_part = st.checkbox("すべて選択", value=True, key="all_part")
 
-    part_cols = st.columns(len(existing_parts))
-    part_checks = {}
-    for col, part in zip(part_cols, existing_parts):
-        with col:
-            part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
+part_cols = st.columns(len(existing_parts))
+part_checks = {}
+for col, part in zip(part_cols, existing_parts):
+    with col:
+        part_checks[part] = st.checkbox(part, value=all_part, key=f"part_{part}")
 
-    # 区分
-    st.markdown("**区分**")
-    type_values = sorted(df["区分"].unique().tolist())
+# 区分
+st.markdown("**区分**")
+all_type = st.checkbox("すべて選択", value=True, key="all_type")
 
-    all_type = st.checkbox("すべて選択", value=True, key="all_type")
+type_cols = st.columns(len(TYPE_MAP))
+type_checks = {}
+for col, t in zip(type_cols, TYPE_MAP.values()):
+    with col:
+        type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
 
-    type_cols = st.columns(len(type_values))
-    type_checks = {}
-    for col, t in zip(type_cols, type_values):
-        with col:
-            type_checks[t] = st.checkbox(t, value=all_type, key=f"type_{t}")
+# =========================
+# 検索処理
+# =========================
 
-    # =========================
-    # 検索処理
-    # =========================
+filtered_df = df.copy()
 
-    filtered_df = df.copy()
-
-    if title_input:
-        filtered_df = filtered_df[
-            filtered_df["曲名"].str.contains(title_input, case=False, na=False)
-        ]
-
-    if composer_input != "指定しない":
-        filtered_df = filtered_df[
-            filtered_df["作曲・編曲者"] == composer_input
-        ]
-
+if title_input:
     filtered_df = filtered_df[
-        filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
+        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
     ]
 
+if composer_input != "指定しない":
     filtered_df = filtered_df[
-        filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
+        filtered_df["作曲・編曲者"] == composer_input
     ]
 
-    # =========================
-    # 検索結果
-    # =========================
+filtered_df = filtered_df[
+    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
+]
 
-    st.divider()
-    st.subheader("検索結果")
-    st.write(f"{len(filtered_df)} 件")
+filtered_df = filtered_df[
+    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
+]
 
-    # =========================
-    # カード表示
-    # =========================
+# =========================
+# 検索結果
+# =========================
 
-    cards_per_row = 3
-    rows = [
-        filtered_df.iloc[i:i + cards_per_row]
-        for i in range(0, len(filtered_df), cards_per_row)
-    ]
+st.divider()
+st.subheader("検索結果")
+st.write(f"{len(filtered_df)} 件")
 
-    for row_df in rows:
-        cols = st.columns(cards_per_row)
+if filtered_df.empty:
+    st.info("該当する楽譜がありません")
 
-        for i in range(cards_per_row):
-            if i >= len(row_df):
-                with cols[i]:
-                    st.empty()
-                continue
+# =========================
+# カード表示
+# =========================
 
-            r = row_df.iloc[i]
-            base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-            color = PART_COLOR.get(base_part, "#64748b")
+cards_per_row = 3
+rows = [
+    filtered_df.iloc[i:i + cards_per_row]
+    for i in range(0, len(filtered_df), cards_per_row)
+]
 
+for row_df in rows:
+    cols = st.columns(cards_per_row)
+
+    for i in range(cards_per_row):
+        if i >= len(row_df):
             with cols[i]:
-                st.markdown(
+                st.empty()
+            continue
+
+        r = row_df.iloc[i]
+        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+        color = PART_COLOR.get(base_part, "#64748b")
+
+        with cols[i]:
+            st.markdown(
 f"""
 <style>
 .score-btn:active {{
@@ -298,7 +296,7 @@ class="score-btn"
 style="
 display:block;
 width:90%;
-margin:14px auto 0 auto;
+margin:12px auto 0 auto;
 text-align:center;
 padding:9px;
 border-radius:8px;
@@ -314,4 +312,4 @@ font-weight:600;
 </div>
 """,
 unsafe_allow_html=True
-                )
+            )
