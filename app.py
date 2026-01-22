@@ -268,7 +268,7 @@ overflow:hidden;
 </p>
 
 <p style="margin:0 0 6px 0;font-size:16px;">
-声　部：<span style="color:{color};">{r['声部']}</span>
+声部：<span style="color:{color};">{r['声部']}</span>
 </p>
 
 <span style="
