@@ -126,17 +126,6 @@ def get_service():
 
 service = get_service()
 
-# ===== 接続テスト（ここに入れる）=====
-service.files().create(
-    body={
-        "name": "test.txt",
-        "parents": [PRIVATE_FOLDER_ID]  # ← 非公開フォルダに作るならこれ
-    },
-    supportsAllDrives=True
-).execute()
-# ====================================
-
-
 # =========================
 # Drive 読み込み
 # =========================
