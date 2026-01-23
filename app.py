@@ -12,6 +12,7 @@ import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.errors import HttpError
 
 # =========================
 # 基本設定
@@ -349,7 +350,8 @@ st.subheader("検索結果")
 
 st.markdown(
     f"""
-<div style="font-size:22px;font-weight:800;border-bottom:3px solid #6366f1;
+<div style="font-size:22px;font-weight:800;
+border-bottom:3px solid #6366f1;
 padding-bottom:6px;margin-bottom:12px;">
 検索結果： {len(filtered_df)} 件
 </div>
@@ -374,7 +376,8 @@ for row_df in rows:
     cols = st.columns(cards_per_row)
     for i in range(cards_per_row):
         if i >= len(row_df):
-            cols[i].empty()
+            with cols[i]:
+                st.empty()
             continue
 
         r = row_df.iloc[i]
@@ -383,23 +386,24 @@ for row_df in rows:
 
         with cols[i]:
             st.markdown(
-                f"""
-<div style="border-left:8px solid {color};padding:14px;border-radius:12px;
-background:#ffffff;height:260px;display:grid;
-grid-template-rows:72px 1fr;row-gap:6px;margin-bottom:24px;
-color:{TEXT_COLOR};">
+f"""
+<div style="border-left:8px solid {color};
+padding:14px;border-radius:12px;background:#ffffff;
+height:260px;display:grid;grid-template-rows:72px 1fr;
+row-gap:6px;margin-bottom:24px;color:{TEXT_COLOR};">
+
 <h3 style="margin:0;font-size:20px;font-weight:700;
-line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;
--webkit-box-orient:vertical;overflow:hidden;">
-{r['曲名']}
-</h3>
+line-height:1.2;display:-webkit-box;
+-webkit-line-clamp:2;-webkit-box-orient:vertical;
+overflow:hidden;">{r['曲名']}</h3>
+
 <div>
 <p>作曲・編曲者：{r['作曲・編曲者']}</p>
 <p>声部：<span style="color:{color};">{r['声部']}</span></p>
+
 <span style="padding:3px 9px;border-radius:999px;
-background:#f1f5f9;font-size:13px;">
-{r['区分']}
-</span>
+background:#f1f5f9;font-size:13px;">{r['区分']}</span>
+
 <a href="{r['url']}" target="_blank"
 style="display:block;margin-top:12px;text-align:center;
 padding:9px;border-radius:8px;background:#e5e7eb;
@@ -438,16 +442,30 @@ if st.session_state.get("is_admin"):
         if file_exists_in_folder(service, uploaded.name, target):
             st.error("⚠️ 同じ名前のPDFがすでに存在します。")
         else:
-            media = MediaIoBaseUpload(
-                io.BytesIO(uploaded.read()),
-                mimetype="application/pdf",
-                resumable=False
-            )
+            try:
+                file_bytes = uploaded.getvalue()
 
-            service.files().create(
-                body={"name": uploaded.name, "parents": [target]},
-                media_body=media,
-                supportsAllDrives=True
-            ).execute()
+                if len(file_bytes) > 50 * 1024 * 1024:
+                    st.error("❌ ファイルサイズが大きすぎます（50MBまで）")
+                else:
+                    media = MediaIoBaseUpload(
+                        io.BytesIO(file_bytes),
+                        mimetype="application/pdf",
+                        resumable=False
+                    )
 
-            st.success("✅ アップロード完了（再読み込みで反映）")
+                    service.files().create(
+                        body={"name": uploaded.name, "parents": [target]},
+                        media_body=media,
+                        supportsAllDrives=True
+                    ).execute()
+
+                    st.success("✅ アップロード完了（再読み込みで反映）")
+
+            except HttpError as e:
+                st.error("❌ Google Drive API エラー")
+                st.code(e)
+
+            except Exception as e:
+                st.error("❌ 予期しないエラー")
+                st.code(e)
