@@ -125,7 +125,7 @@ df = load_from_drive()
 # =========================
 
 st.divider()
-st.subheader("🔍 検索")
+st.subheader("検索")
 
 col1, col2 = st.columns([2, 1])
 with col1:
@@ -137,8 +137,10 @@ with col2:
 st.caption("▼ 詳細条件")
 
 # =========================
-# 声部（表示順定義）
+# 声部（チェックボックス）
 # =========================
+
+st.markdown("**声部**")
 
 def part_sort_key(part):
     base = re.sub(r"(二部|三部|四部)", "", part)
@@ -156,8 +158,6 @@ existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=part_sort_key
 )
-
-st.markdown("**声部**")
 
 if "initialized_part" not in st.session_state:
     st.session_state["all_part"] = True
@@ -187,8 +187,10 @@ for col, part in zip(part_cols, existing_parts):
             on_change=sync_all_part
         )
 
+PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
+
 # =========================
-# 区分
+# 区分（チェックボックス）
 # =========================
 
 st.markdown("**区分**")
@@ -222,6 +224,32 @@ for col, t in zip(type_cols, type_labels):
             on_change=sync_all_type
         )
 
+TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
+
+# =========================
+# 並び替えUI（検索と分離）
+# =========================
+
+st.divider()
+st.markdown("### 🔃 並び替え")
+
+sort_col1, sort_col2 = st.columns([3, 2])
+
+with sort_col1:
+    sort_key = st.selectbox(
+        "並び替え項目",
+        ["曲名（五十音順）", "声部", "区分"],
+        index=0   # 初期：曲名（五十音順）
+    )
+
+with sort_col2:
+    sort_order = st.radio(
+        "順序",
+        ["昇順", "降順"],
+        horizontal=True,
+        index=0   # 初期：昇順
+    )
+
 # =========================
 # 検索処理
 # =========================
@@ -246,65 +274,42 @@ filtered_df = filtered_df[
     filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
 ]
 
-# =========================
-# 並び替えUI
-# =========================
-
-st.divider()
-st.markdown("### 🔃 並び替え")
-
-sort_col1, sort_col2 = st.columns([3, 2])
-
-with sort_col1:
-    sort_key = st.selectbox(
-        "並び替え項目",
-        ["曲名（五十音順）", "声部", "区分"],
-        index=0
-    )
-
-with sort_col2:
-    sort_order = st.radio(
-        "順序",
-        ["昇順 ⬆️", "降順 ⬇️"],
-        horizontal=True,
-        index=0
-    )
-
-ascending = sort_order.startswith("昇順")
-
-# =========================
-# 並び替え処理
-# =========================
+ascending = sort_order == "昇順"
 
 if sort_key == "曲名（五十音順）":
     filtered_df = filtered_df.sort_values("code", ascending=ascending)
 
 elif sort_key == "声部":
-    part_order = {p: i for i, p in enumerate(existing_parts)}
-    filtered_df["_order"] = filtered_df["声部"].map(part_order)
-    filtered_df = filtered_df.sort_values("_order", ascending=ascending)
-    filtered_df = filtered_df.drop(columns="_order")
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["声部"].map(PART_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
 
 elif sort_key == "区分":
-    type_order = {t: i for i, t in enumerate(type_labels)}
-    filtered_df["_order"] = filtered_df["区分"].map(type_order)
-    filtered_df = filtered_df.sort_values("_order", ascending=ascending)
-    filtered_df = filtered_df.drop(columns="_order")
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
 
 # =========================
-# 検索結果件数（強調）
+# 検索結果
 # =========================
 
 st.divider()
+st.subheader("検索結果")
+
 st.markdown(
     f"""
 <div style="
-padding:12px 16px;
-border-radius:10px;
-background:#f1f5f9;
-font-size:18px;
-font-weight:700;
-color:{TEXT_COLOR};
+font-size:22px;
+font-weight:800;
+border-bottom:3px solid #6366f1;
+padding-bottom:6px;
+margin-bottom:12px;
 ">
 検索結果： {len(filtered_df)} 件
 </div>
@@ -368,11 +373,9 @@ overflow:hidden;
 </h3>
 
 <div>
-<p style="font-size:16px;margin:0 0 6px 0;">
-作曲・編曲者：{r['作曲・編曲者']}
-</p>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
 
-<p style="margin:0 0 6px 0;font-size:16px;">
+<p style="margin:0 0 6px 0;">
 声部：<span style="color:{color};">{r['声部']}</span>
 </p>
 
@@ -389,8 +392,7 @@ font-size:13px;
 <a href="{r['url']}" target="_blank"
 style="
 display:block;
-width:90%;
-margin:12px auto 0 auto;
+margin-top:12px;
 text-align:center;
 padding:9px;
 border-radius:8px;
@@ -404,5 +406,5 @@ font-weight:600;
 </div>
 </div>
 """,
-unsafe_allow_html=True
+                unsafe_allow_html=True
             )
