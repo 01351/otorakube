@@ -123,8 +123,25 @@ def get_service():
     )
     return build("drive", "v3", credentials=credentials)
 
-
 service = get_service()
+
+# =========================
+# 同名ファイル存在チェック
+# =========================
+
+def file_exists_in_folder(service, filename, folder_id):
+    query = (
+        f"name = '{filename}' and "
+        f"'{folder_id}' in parents and "
+        "trashed = false"
+    )
+    res = service.files().list(
+        q=query,
+        fields="files(id)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+    return len(res.get("files", [])) > 0
 
 # =========================
 # Drive 読み込み
@@ -134,7 +151,9 @@ service = get_service()
 def load_from_drive(folder_id):
     results = service.files().list(
         q=f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(id,name,webViewLink)"
+        fields="files(id,name,webViewLink)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
     ).execute()
 
     rows = []
@@ -172,7 +191,7 @@ with col2:
 st.caption("▼ 詳細条件")
 
 # =========================
-# 声部（チェックボックス）
+# 声部
 # =========================
 
 st.markdown("**声部**")
@@ -225,7 +244,7 @@ for col, part in zip(part_cols, existing_parts):
 PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
 
 # =========================
-# 区分（チェックボックス）
+# 区分
 # =========================
 
 st.markdown("**区分**")
@@ -262,7 +281,7 @@ for col, t in zip(type_cols, type_labels):
 TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
 
 # =========================
-# 並び替えUI
+# 並び替え
 # =========================
 
 st.markdown("**並び替え**")
@@ -334,13 +353,8 @@ st.subheader("検索結果")
 
 st.markdown(
     f"""
-<div style="
-font-size:22px;
-font-weight:800;
-border-bottom:3px solid #6366f1;
-padding-bottom:6px;
-margin-bottom:12px;
-">
+<div style="font-size:22px;font-weight:800;border-bottom:3px solid #6366f1;
+padding-bottom:6px;margin-bottom:12px;">
 検索結果： {len(filtered_df)} 件
 </div>
 """,
@@ -376,61 +390,30 @@ for row_df in rows:
         with cols[i]:
             st.markdown(
 f"""
-<div style="
-border-left:8px solid {color};
-padding:14px;
-border-radius:12px;
-background:#ffffff;
-height:260px;
-display:grid;
-grid-template-rows:72px 1fr;
-row-gap:6px;
-margin-bottom:24px;
-color:{TEXT_COLOR};
-">
+<div style="border-left:8px solid {color};padding:14px;border-radius:12px;
+background:#ffffff;height:260px;display:grid;
+grid-template-rows:72px 1fr;row-gap:6px;margin-bottom:24px;
+color:{TEXT_COLOR};">
 
-<h3 style="
-margin:0;
-font-size:20px;
-font-weight:700;
-line-height:1.2;
-display:-webkit-box;
--webkit-line-clamp:2;
--webkit-box-orient:vertical;
-overflow:hidden;
-">
+<h3 style="margin:0;font-size:20px;font-weight:700;
+line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;
+-webkit-box-orient:vertical;overflow:hidden;">
 {r['曲名']}
 </h3>
 
 <div>
-<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
+<p>作曲・編曲者：{r['作曲・編曲者']}</p>
+<p>声部：<span style="color:{color};">{r['声部']}</span></p>
 
-<p style="margin:0 0 6px 0;">
-声部：<span style="color:{color};">{r['声部']}</span>
-</p>
-
-<span style="
-display:inline-block;
-padding:3px 9px;
-border-radius:999px;
-background:#f1f5f9;
-font-size:13px;
-">
+<span style="padding:3px 9px;border-radius:999px;
+background:#f1f5f9;font-size:13px;">
 {r['区分']}
 </span>
 
 <a href="{r['url']}" target="_blank"
-style="
-display:block;
-margin-top:12px;
-text-align:center;
-padding:9px;
-border-radius:8px;
-background:#e5e7eb;
-color:{TEXT_COLOR};
-text-decoration:none;
-font-weight:600;
-">
+style="display:block;margin-top:12px;text-align:center;
+padding:9px;border-radius:8px;background:#e5e7eb;
+color:{TEXT_COLOR};text-decoration:none;font-weight:600;">
 楽譜を開く
 </a>
 </div>
@@ -460,17 +443,21 @@ if st.session_state.get("is_admin"):
     is_private = st.checkbox("非公開としてアップロード")
 
     if uploaded:
-        media = MediaIoBaseUpload(
-            io.BytesIO(uploaded.read()),
-            mimetype="application/pdf"
-        )
-
         target = PRIVATE_FOLDER_ID if is_private else FOLDER_ID
 
-        service.files().create(
-            body={"name": uploaded.name, "parents": [target]},
-            media_body=media
-        ).execute()
+        if file_exists_in_folder(service, uploaded.name, target):
+            st.error("⚠️ 同じ名前のPDFがすでに存在します。")
+        else:
+            media = MediaIoBaseUpload(
+                io.BytesIO(uploaded.read()),
+                mimetype="application/pdf",
+                resumable=True
+            )
 
-        st.success("アップロード完了（再読み込みで反映）")
+            service.files().create(
+                body={"name": uploaded.name, "parents": [target]},
+                media_body=media,
+                supportsAllDrives=True
+            ).execute()
 
+            st.success("✅ アップロード完了（再読み込みで反映）")
