@@ -7,8 +7,10 @@
 import streamlit as st
 import pandas as pd
 import re
+import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # =========================
 # 基本設定
@@ -26,8 +28,9 @@ st.caption("Google Drive 上の楽譜PDFを検索できます")
 # Google Drive 設定
 # =========================
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+PRIVATE_FOLDER_ID = "PRIVATE_FOLDER_ID_HERE"
 
 # =========================
 # 定義マップ
@@ -63,6 +66,22 @@ PART_COLOR = {
 TEXT_COLOR = "#0f172a"
 
 # =========================
+# 管理者ログイン
+# =========================
+
+if "is_admin" not in st.session_state:
+    st.session_state["is_admin"] = False
+
+with st.expander("🔐 管理者ログイン"):
+    admin_pwd = st.text_input("管理者パスワード", type="password")
+    if admin_pwd:
+        if admin_pwd == st.secrets["ADMIN_PASSWORD"]:
+            st.session_state["is_admin"] = True
+            st.success("管理者としてログインしました")
+        else:
+            st.error("パスワードが違います")
+
+# =========================
 # ファイル名解析
 # =========================
 
@@ -89,36 +108,46 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 読み込み
+# Drive 接続
 # =========================
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_from_drive():
+@st.cache_data(ttl=60)
+def get_service():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
     )
+    return build("drive", "v3", credentials=credentials)
 
-    service = build("drive", "v3", credentials=credentials)
+service = get_service()
 
+# =========================
+# Drive 読み込み
+# =========================
+
+def load_from_drive(folder_id):
     results = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
+        q=f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'",
+        fields="files(id,name,webViewLink)"
     ).execute()
 
     rows = []
+    errors = []
+
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+            rows.append({**parsed, "url": f["webViewLink"], "id": f["id"]})
+        else:
+            errors.append(f["name"])
 
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values("code")
 
-    return df
+    return df, errors
 
-df = load_from_drive()
+df, filename_errors = load_from_drive(FOLDER_ID)
 
 # =========================
 # 検索UI
@@ -227,28 +256,23 @@ for col, t in zip(type_cols, type_labels):
 TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
 
 # =========================
-# 並び替えUI（検索と分離）
+# 並び替えUI
 # =========================
 
-st.divider()
-st.markdown("### 🔃 並び替え")
+st.markdown("**並び替え**")
 
-sort_col1, sort_col2 = st.columns([3, 2])
+sort_key = st.selectbox(
+    "項目",
+    ["曲名（五十音順）", "声部", "区分"],
+    index=0
+)
 
-with sort_col1:
-    sort_key = st.selectbox(
-        "並び替え項目",
-        ["曲名（五十音順）", "声部", "区分"],
-        index=0   # 初期：曲名（五十音順）
-    )
-
-with sort_col2:
-    sort_order = st.radio(
-        "順序",
-        ["昇順", "降順"],
-        horizontal=True,
-        index=0   # 初期：昇順
-    )
+sort_order = st.radio(
+    "順序",
+    ["昇順", "降順"],
+    index=0,
+    horizontal=True
+)
 
 # =========================
 # 検索処理
@@ -408,3 +432,45 @@ font-weight:600;
 """,
                 unsafe_allow_html=True
             )
+
+# =========================
+# 管理者メニュー
+# =========================
+
+if st.session_state.get("is_admin"):
+    st.divider()
+    st.markdown("## 🔧 管理者メニュー")
+
+    st.markdown("### 🧪 ファイル名チェック")
+    if filename_errors:
+        st.error(f"❌ ルール違反：{len(filename_errors)} 件")
+        for name in filename_errors:
+            st.write("・", name)
+    else:
+        st.success("すべて正常です")
+
+    st.markdown("### 📤 PDFアップロード")
+    uploaded = st.file_uploader("PDFを追加", type="pdf")
+    is_private = st.checkbox("非公開としてアップロード")
+
+    if uploaded:
+        media = MediaIoBaseUpload(
+            io.BytesIO(uploaded.read()),
+            mimetype="application/pdf"
+        )
+        folder = PRIVATE_FOLDER_ID if is_private else FOLDER_ID
+        service.files().create(
+            body={"name": uploaded.name, "parents": [folder]},
+            media_body=media
+        ).execute()
+        st.success("アップロード完了（再読み込みで反映）")
+
+    st.markdown("### 👀 非公開ファイル一覧")
+    private_df, _ = load_from_drive(PRIVATE_FOLDER_ID)
+    if private_df.empty:
+        st.info("非公開ファイルはありません")
+    else:
+        st.dataframe(
+            private_df[["code", "曲名", "声部", "区分", "作曲・編曲者"]],
+            use_container_width=True
+        )
