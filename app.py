@@ -15,11 +15,11 @@ from googleapiclient.discovery import build
 # =========================
 
 st.set_page_config(
-    page_title="楽譜管理アプリ",
+    page_title="楽譜管理システム",  # ① タイトル変更
     layout="wide"
 )
 
-st.title("楽譜管理アプリ")
+st.title("楽譜管理システム")  # ① タイトル変更
 st.caption("Google Drive 上の楽譜PDFを検索できます")
 
 # =========================
@@ -188,7 +188,7 @@ for col, part in zip(part_cols, existing_parts):
         )
 
 # =========================
-# 区分（初期すべてON）
+# 区分
 # =========================
 
 st.markdown("**区分**")
@@ -223,6 +223,27 @@ for col, t in zip(type_cols, type_labels):
         )
 
 # =========================
+# 並び替えUI（③ 追加）
+# =========================
+
+st.markdown("**並び替え**")
+
+sort_col, sort_order_col = st.columns([2, 1])
+
+with sort_col:
+    sort_key = st.selectbox(
+        "項目",
+        ["曲名", "作曲・編曲者", "声部", "区分"]
+    )
+
+with sort_order_col:
+    sort_order = st.radio(
+        "順序",
+        ["昇順", "降順"],
+        horizontal=True
+    )
+
+# =========================
 # 検索処理
 # =========================
 
@@ -246,16 +267,38 @@ filtered_df = filtered_df[
     filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
 ]
 
+# 並び替え適用（③）
+ascending = sort_order == "昇順"
+filtered_df = filtered_df.sort_values(sort_key, ascending=ascending)
+
 # =========================
 # 検索結果
 # =========================
 
 st.divider()
 st.subheader("検索結果")
-st.write(f"{len(filtered_df)} 件")
+
+# ② 件数を目立たせるUI
+st.markdown(
+    f"""
+<div style="
+background:#f1f5f9;
+border-left:6px solid #6366f1;
+padding:12px 16px;
+border-radius:10px;
+font-size:18px;
+font-weight:700;
+width:fit-content;
+margin-bottom:12px;
+">
+🔍 検索結果： {len(filtered_df)} 件
+</div>
+""",
+    unsafe_allow_html=True
+)
 
 if filtered_df.empty:
-    st.info("Drive に楽譜ファイルがありません")
+    st.info("条件に一致する楽譜がありません")
 
 # =========================
 # カード表示
@@ -283,12 +326,6 @@ for row_df in rows:
         with cols[i]:
             st.markdown(
 f"""
-<style>
-.score-btn:active {{
-  background:#c7d2fe !important;
-}}
-</style>
-
 <div style="
 border-left:8px solid {color};
 padding:14px;
@@ -302,7 +339,6 @@ margin-bottom:24px;
 color:{TEXT_COLOR};
 ">
 
-<div style="display:flex;align-items:center;">
 <h3 style="
 margin:0;
 font-size:20px;
@@ -315,35 +351,27 @@ overflow:hidden;
 ">
 {r['曲名']}
 </h3>
-</div>
 
-<div style="display:flex;flex-direction:column;">
-
-<p style="font-size:16px;margin:0 0 6px 0;">
-作曲・編曲者：{r['作曲・編曲者']}
-</p>
-
-<p style="margin:0 0 6px 0;font-size:16px;">
+<div>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
+<p style="margin:0 0 6px 0;">
 声部：<span style="color:{color};">{r['声部']}</span>
 </p>
 
 <span style="
-align-self:flex-start;
+display:inline-block;
 padding:3px 9px;
 border-radius:999px;
 background:#f1f5f9;
 font-size:13px;
-margin-bottom:4px;
 ">
 {r['区分']}
 </span>
 
 <a href="{r['url']}" target="_blank"
-class="score-btn"
 style="
 display:block;
-width:90%;
-margin:12px auto 0 auto;
+margin-top:12px;
 text-align:center;
 padding:9px;
 border-radius:8px;
@@ -354,9 +382,8 @@ font-weight:600;
 ">
 楽譜を開く
 </a>
-
 </div>
 </div>
 """,
-unsafe_allow_html=True
+                unsafe_allow_html=True
             )
