@@ -451,7 +451,6 @@ if st.session_state.get("is_admin"):
             media = MediaIoBaseUpload(
                 io.BytesIO(uploaded.read()),
                 mimetype="application/pdf",
-                resumable=True
             )
 
             service.files().create(
