@@ -7,12 +7,8 @@
 import streamlit as st
 import pandas as pd
 import re
-import io
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from googleapiclient.errors import HttpError
 
 # =========================
 # 基本設定
@@ -27,17 +23,11 @@ st.title("楽譜管理システム")
 st.caption("Google Drive 上の楽譜PDFを検索できます")
 
 # =========================
-# 定数
+# Google Drive 設定
 # =========================
 
-ADMIN_PASSWORD = "0000"
-
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
-PRIVATE_FOLDER_ID = "1q8mfqK5Kc-QXOLe-9oJZTEFj3A8UO4hX"
-
-TEXT_COLOR = "#0f172a"
 
 # =========================
 # 定義マップ
@@ -70,21 +60,7 @@ PART_COLOR = {
     "斉唱": "#9333ea"
 }
 
-# =========================
-# 管理者ログイン
-# =========================
-
-if "is_admin" not in st.session_state:
-    st.session_state["is_admin"] = False
-
-with st.expander("🔐 管理者ログイン"):
-    pwd = st.text_input("管理者パスワード", type="password")
-    if pwd:
-        if pwd == ADMIN_PASSWORD:
-            st.session_state["is_admin"] = True
-            st.success("管理者ログイン中")
-        else:
-            st.error("パスワードが違います")
+TEXT_COLOR = "#0f172a"
 
 # =========================
 # ファイル名解析
@@ -113,67 +89,36 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 接続
+# Google Drive 読み込み
 # =========================
 
-@st.cache_data(ttl=60)
-def get_service():
+@st.cache_data(ttl=60, show_spinner=False)
+def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
     )
-    return build("drive", "v3", credentials=credentials)
 
-service = get_service()
+    service = build("drive", "v3", credentials=credentials)
 
-# =========================
-# 同名ファイル存在チェック
-# =========================
-
-def file_exists_in_folder(service, filename, folder_id):
-    query = (
-        f"name = '{filename}' and "
-        f"'{folder_id}' in parents and "
-        "trashed = false"
-    )
-    res = service.files().list(
-        q=query,
-        fields="files(id)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
-    return len(res.get("files", [])) > 0
-
-# =========================
-# Drive 読み込み
-# =========================
-
-@st.cache_data(ttl=60)
-def load_from_drive(folder_id):
     results = service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(id,name,webViewLink)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
+        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
+        fields="files(name, webViewLink)"
     ).execute()
 
     rows = []
-    errors = []
-
     for f in results.get("files", []):
         parsed = parse_filename(f["name"])
         if parsed:
             rows.append({**parsed, "url": f["webViewLink"]})
-        else:
-            errors.append(f["name"])
 
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values("code")
 
-    return df, errors
+    return df
 
-df, filename_errors = load_from_drive(FOLDER_ID)
+df = load_from_drive()
 
 # =========================
 # 検索UI
@@ -192,7 +137,7 @@ with col2:
 st.caption("▼ 詳細条件")
 
 # =========================
-# 声部
+# 声部（チェックボックス）
 # =========================
 
 st.markdown("**声部**")
@@ -245,7 +190,7 @@ for col, part in zip(part_cols, existing_parts):
 PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
 
 # =========================
-# 区分
+# 区分（チェックボックス）
 # =========================
 
 st.markdown("**区分**")
@@ -282,23 +227,28 @@ for col, t in zip(type_cols, type_labels):
 TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
 
 # =========================
-# 並び替え
+# 並び替えUI（検索と分離）
 # =========================
 
-st.markdown("**並び替え**")
+st.divider()
+st.markdown("### 🔃 並び替え")
 
-sort_key = st.selectbox(
-    "項目",
-    ["曲名（五十音順）", "声部", "区分"],
-    index=0
-)
+sort_col1, sort_col2 = st.columns([3, 2])
 
-sort_order = st.radio(
-    "順序",
-    ["昇順", "降順"],
-    index=0,
-    horizontal=True
-)
+with sort_col1:
+    sort_key = st.selectbox(
+        "並び替え項目",
+        ["曲名（五十音順）", "声部", "区分"],
+        index=0   # 初期：曲名（五十音順）
+    )
+
+with sort_col2:
+    sort_order = st.radio(
+        "順序",
+        ["昇順", "降順"],
+        horizontal=True,
+        index=0   # 初期：昇順
+    )
 
 # =========================
 # 検索処理
@@ -328,15 +278,19 @@ ascending = sort_order == "昇順"
 
 if sort_key == "曲名（五十音順）":
     filtered_df = filtered_df.sort_values("code", ascending=ascending)
+
 elif sort_key == "声部":
     filtered_df = (
-        filtered_df.assign(_order=filtered_df["声部"].map(PART_ORDER))
+        filtered_df
+        .assign(_order=filtered_df["声部"].map(PART_ORDER))
         .sort_values("_order", ascending=ascending)
         .drop(columns="_order")
     )
+
 elif sort_key == "区分":
     filtered_df = (
-        filtered_df.assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+        filtered_df
+        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
         .sort_values("_order", ascending=ascending)
         .drop(columns="_order")
     )
@@ -350,9 +304,13 @@ st.subheader("検索結果")
 
 st.markdown(
     f"""
-<div style="font-size:22px;font-weight:800;
+<div style="
+font-size:22px;
+font-weight:800;
 border-bottom:3px solid #6366f1;
-padding-bottom:6px;margin-bottom:12px;">
+padding-bottom:6px;
+margin-bottom:12px;
+">
 検索結果： {len(filtered_df)} 件
 </div>
 """,
@@ -374,6 +332,7 @@ rows = [
 
 for row_df in rows:
     cols = st.columns(cards_per_row)
+
     for i in range(cards_per_row):
         if i >= len(row_df):
             with cols[i]:
@@ -387,27 +346,61 @@ for row_df in rows:
         with cols[i]:
             st.markdown(
 f"""
-<div style="border-left:8px solid {color};
-padding:14px;border-radius:12px;background:#ffffff;
-height:260px;display:grid;grid-template-rows:72px 1fr;
-row-gap:6px;margin-bottom:24px;color:{TEXT_COLOR};">
+<div style="
+border-left:8px solid {color};
+padding:14px;
+border-radius:12px;
+background:#ffffff;
+height:260px;
+display:grid;
+grid-template-rows:72px 1fr;
+row-gap:6px;
+margin-bottom:24px;
+color:{TEXT_COLOR};
+">
 
-<h3 style="margin:0;font-size:20px;font-weight:700;
-line-height:1.2;display:-webkit-box;
--webkit-line-clamp:2;-webkit-box-orient:vertical;
-overflow:hidden;">{r['曲名']}</h3>
+<h3 style="
+margin:0;
+font-size:20px;
+font-weight:700;
+line-height:1.2;
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+overflow:hidden;
+">
+{r['曲名']}
+</h3>
 
 <div>
-<p>作曲・編曲者：{r['作曲・編曲者']}</p>
-<p>声部：<span style="color:{color};">{r['声部']}</span></p>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
 
-<span style="padding:3px 9px;border-radius:999px;
-background:#f1f5f9;font-size:13px;">{r['区分']}</span>
+<p style="margin:0 0 6px 0;">
+声部：<span style="color:{color};">{r['声部']}</span>
+</p>
+
+<span style="
+display:inline-block;
+padding:3px 9px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:13px;
+">
+{r['区分']}
+</span>
 
 <a href="{r['url']}" target="_blank"
-style="display:block;margin-top:12px;text-align:center;
-padding:9px;border-radius:8px;background:#e5e7eb;
-color:{TEXT_COLOR};text-decoration:none;font-weight:600;">
+style="
+display:block;
+margin-top:12px;
+text-align:center;
+padding:9px;
+border-radius:8px;
+background:#e5e7eb;
+color:{TEXT_COLOR};
+text-decoration:none;
+font-weight:600;
+">
 楽譜を開く
 </a>
 </div>
@@ -415,57 +408,3 @@ color:{TEXT_COLOR};text-decoration:none;font-weight:600;">
 """,
                 unsafe_allow_html=True
             )
-
-# =========================
-# 管理者メニュー
-# =========================
-
-if st.session_state.get("is_admin"):
-    st.divider()
-    st.header("🔧 管理者メニュー")
-
-    st.subheader("🧪 ファイル名チェック")
-    if filename_errors:
-        st.error(f"{len(filename_errors)} 件のルール違反")
-        for n in filename_errors:
-            st.write("・", n)
-    else:
-        st.success("すべて正しい形式です")
-
-    st.subheader("📤 PDFアップロード")
-    uploaded = st.file_uploader("PDFを選択", type="pdf")
-    is_private = st.checkbox("非公開としてアップロード")
-
-    if uploaded:
-        target = PRIVATE_FOLDER_ID if is_private else FOLDER_ID
-
-        if file_exists_in_folder(service, uploaded.name, target):
-            st.error("⚠️ 同じ名前のPDFがすでに存在します。")
-        else:
-            try:
-                file_bytes = uploaded.getvalue()
-
-                if len(file_bytes) > 50 * 1024 * 1024:
-                    st.error("❌ ファイルサイズが大きすぎます（50MBまで）")
-                else:
-                    media = MediaIoBaseUpload(
-                        io.BytesIO(file_bytes),
-                        mimetype="application/pdf",
-                        resumable=False
-                    )
-
-                    service.files().create(
-                        body={"name": uploaded.name, "parents": [target]},
-                        media_body=media,
-                        supportsAllDrives=True
-                    ).execute()
-
-                    st.success("✅ アップロード完了（再読み込みで反映）")
-
-            except HttpError as e:
-                st.error("❌ Google Drive API エラー")
-                st.code(e)
-
-            except Exception as e:
-                st.error("❌ 予期しないエラー")
-                st.code(e)
