@@ -15,11 +15,11 @@ from googleapiclient.discovery import build
 # =========================
 
 st.set_page_config(
-    page_title="楽譜管理システム",  # ① タイトル変更
+    page_title="楽譜管理システム",
     layout="wide"
 )
 
-st.title("楽譜管理システム")  # ① タイトル変更
+st.title("楽譜管理システム")
 st.caption("Google Drive 上の楽譜PDFを検索できます")
 
 # =========================
@@ -149,10 +149,10 @@ def part_sort_key(part):
     base_order = ["混声", "女声", "男声", "斉唱"]
     num_order = ["二部", "三部", "四部"]
 
-    base_idx = base_order.index(base) if base in base_order else 99
-    num_idx = num_order.index(num.group()) if num else 99
-
-    return (base_idx, num_idx)
+    return (
+        base_order.index(base) if base in base_order else 99,
+        num_order.index(num.group()) if num else 99
+    )
 
 existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
@@ -223,25 +223,25 @@ for col, t in zip(type_cols, type_labels):
         )
 
 # =========================
-# 並び替えUI（③ 追加）
+# 並び替えUI
 # =========================
 
 st.markdown("**並び替え**")
 
-sort_col, sort_order_col = st.columns([2, 1])
+sort_key = st.selectbox(
+    "項目",
+    [
+        "曲名（五十音順）",
+        "声部",
+        "区分"
+    ]
+)
 
-with sort_col:
-    sort_key = st.selectbox(
-        "項目",
-        ["曲名", "作曲・編曲者", "声部", "区分"]
-    )
-
-with sort_order_col:
-    sort_order = st.radio(
-        "順序",
-        ["昇順", "降順"],
-        horizontal=True
-    )
+sort_order = st.radio(
+    "順序",
+    ["昇順", "降順"],
+    horizontal=True
+)
 
 # =========================
 # 検索処理
@@ -267,9 +267,12 @@ filtered_df = filtered_df[
     filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
 ]
 
-# 並び替え適用（③）
 ascending = sort_order == "昇順"
-filtered_df = filtered_df.sort_values(sort_key, ascending=ascending)
+
+# 並び替えロジック
+if sort_key == "曲名（五十音順）":
+    filtered_df = filtered_df.sort_values("code", ascending=ascending)
+# 声部・区分は検索表示順を尊重 → ソートしない
 
 # =========================
 # 検索結果
@@ -278,20 +281,16 @@ filtered_df = filtered_df.sort_values(sort_key, ascending=ascending)
 st.divider()
 st.subheader("検索結果")
 
-# ② 件数を目立たせるUI
 st.markdown(
     f"""
 <div style="
-background:#f1f5f9;
-border-left:6px solid #6366f1;
-padding:12px 16px;
-border-radius:10px;
-font-size:18px;
-font-weight:700;
-width:fit-content;
+font-size:22px;
+font-weight:800;
+border-bottom:3px solid #6366f1;
+padding-bottom:6px;
 margin-bottom:12px;
 ">
-🔍 検索結果： {len(filtered_df)} 件
+検索結果： {len(filtered_df)} 件
 </div>
 """,
     unsafe_allow_html=True
