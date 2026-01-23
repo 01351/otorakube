@@ -327,19 +327,15 @@ ascending = sort_order == "昇順"
 
 if sort_key == "曲名（五十音順）":
     filtered_df = filtered_df.sort_values("code", ascending=ascending)
-
 elif sort_key == "声部":
     filtered_df = (
-        filtered_df
-        .assign(_order=filtered_df["声部"].map(PART_ORDER))
+        filtered_df.assign(_order=filtered_df["声部"].map(PART_ORDER))
         .sort_values("_order", ascending=ascending)
         .drop(columns="_order")
     )
-
 elif sort_key == "区分":
     filtered_df = (
-        filtered_df
-        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+        filtered_df.assign(_order=filtered_df["区分"].map(TYPE_ORDER))
         .sort_values("_order", ascending=ascending)
         .drop(columns="_order")
     )
@@ -376,11 +372,9 @@ rows = [
 
 for row_df in rows:
     cols = st.columns(cards_per_row)
-
     for i in range(cards_per_row):
         if i >= len(row_df):
-            with cols[i]:
-                st.empty()
+            cols[i].empty()
             continue
 
         r = row_df.iloc[i]
@@ -389,27 +383,23 @@ for row_df in rows:
 
         with cols[i]:
             st.markdown(
-f"""
+                f"""
 <div style="border-left:8px solid {color};padding:14px;border-radius:12px;
 background:#ffffff;height:260px;display:grid;
 grid-template-rows:72px 1fr;row-gap:6px;margin-bottom:24px;
 color:{TEXT_COLOR};">
-
 <h3 style="margin:0;font-size:20px;font-weight:700;
 line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;
 -webkit-box-orient:vertical;overflow:hidden;">
 {r['曲名']}
 </h3>
-
 <div>
 <p>作曲・編曲者：{r['作曲・編曲者']}</p>
 <p>声部：<span style="color:{color};">{r['声部']}</span></p>
-
 <span style="padding:3px 9px;border-radius:999px;
 background:#f1f5f9;font-size:13px;">
 {r['区分']}
 </span>
-
 <a href="{r['url']}" target="_blank"
 style="display:block;margin-top:12px;text-align:center;
 padding:9px;border-radius:8px;background:#e5e7eb;
@@ -451,6 +441,7 @@ if st.session_state.get("is_admin"):
             media = MediaIoBaseUpload(
                 io.BytesIO(uploaded.read()),
                 mimetype="application/pdf",
+                resumable=False
             )
 
             service.files().create(
