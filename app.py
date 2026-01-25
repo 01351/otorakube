@@ -158,3 +158,252 @@ existing_parts = sorted(
     df["声部"].dropna().unique().tolist(),
     key=part_sort_key
 )
+if "initialized_part" not in st.session_state:
+    st.session_state["all_part"] = True
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = True
+    st.session_state["initialized_part"] = True
+
+def toggle_all_part():
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = st.session_state["all_part"]
+
+def sync_all_part():
+    st.session_state["all_part"] = all(
+        st.session_state.get(f"part_{p}", False) for p in existing_parts
+    )
+
+st.checkbox("すべて選択", key="all_part", on_change=toggle_all_part)
+
+part_cols = st.columns(len(existing_parts))
+part_checks = {}
+
+for col, part in zip(part_cols, existing_parts):
+    with col:
+        part_checks[part] = st.checkbox(
+            part,
+            key=f"part_{part}",
+            on_change=sync_all_part
+        )
+
+PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
+
+# =========================
+# 区分（チェックボックス）
+# =========================
+
+st.markdown("**区分**")
+type_labels = list(TYPE_MAP.values())
+
+if "initialized_type" not in st.session_state:
+    st.session_state["all_type"] = True
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = True
+    st.session_state["initialized_type"] = True
+
+def toggle_all_type():
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = st.session_state["all_type"]
+
+def sync_all_type():
+    st.session_state["all_type"] = all(
+        st.session_state.get(f"type_{t}", False) for t in type_labels
+    )
+
+st.checkbox("すべて選択", key="all_type", on_change=toggle_all_type)
+
+type_cols = st.columns(len(type_labels))
+type_checks = {}
+
+for col, t in zip(type_cols, type_labels):
+    with col:
+        type_checks[t] = st.checkbox(
+            t,
+            key=f"type_{t}",
+            on_change=sync_all_type
+        )
+
+TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
+
+# =========================
+# 並び替えUI（検索と分離）
+# =========================
+
+st.divider()
+st.markdown("### 🔃 並び替え")
+
+sort_col1, sort_col2 = st.columns([3, 2])
+
+with sort_col1:
+    sort_key = st.selectbox(
+        "並び替え項目",
+        ["曲名（五十音順）", "声部", "区分"],
+        index=0
+    )
+
+with sort_col2:
+    sort_order = st.radio(
+        "順序",
+        ["昇順", "降順"],
+        horizontal=True,
+        index=0
+    )
+
+# =========================
+# 検索処理
+# =========================
+
+filtered_df = df.copy()
+
+if title_input:
+    filtered_df = filtered_df[
+        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+    ]
+
+if composer_input != "指定しない":
+    filtered_df = filtered_df[
+        filtered_df["作曲・編曲者"] == composer_input
+    ]
+
+filtered_df = filtered_df[
+    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
+]
+
+filtered_df = filtered_df[
+    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
+]
+
+ascending = sort_order == "昇順"
+
+if sort_key == "曲名（五十音順）":
+    filtered_df = filtered_df.sort_values("code", ascending=ascending)
+
+elif sort_key == "声部":
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["声部"].map(PART_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
+
+elif sort_key == "区分":
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
+
+# =========================
+# 検索結果
+# =========================
+
+st.divider()
+st.subheader("検索結果")
+
+st.markdown(
+    f"""
+<div style="
+font-size:22px;
+font-weight:800;
+border-bottom:3px solid #6366f1;
+padding-bottom:6px;
+margin-bottom:12px;
+">
+検索結果： {len(filtered_df)} 件
+</div>
+""",
+    unsafe_allow_html=True
+)
+
+if filtered_df.empty:
+    st.info("条件に一致する楽譜がありません")
+
+# =========================
+# カード表示
+# =========================
+
+cards_per_row = 3
+rows = [
+    filtered_df.iloc[i:i + cards_per_row]
+    for i in range(0, len(filtered_df), cards_per_row)
+]
+
+for row_df in rows:
+    cols = st.columns(cards_per_row)
+
+    for i in range(cards_per_row):
+        if i >= len(row_df):
+            with cols[i]:
+                st.empty()
+            continue
+
+        r = row_df.iloc[i]
+        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+        color = PART_COLOR.get(base_part, "#64748b")
+
+        with cols[i]:
+            st.markdown(
+f"""
+<div style="
+border-left:8px solid {color};
+padding:14px;
+border-radius:12px;
+background:#ffffff;
+height:260px;
+display:grid;
+grid-template-rows:72px 1fr;
+row-gap:6px;
+margin-bottom:24px;
+color:{TEXT_COLOR};
+">
+
+<h3 style="
+margin:0;
+font-size:20px;
+font-weight:700;
+line-height:1.2;
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+overflow:hidden;
+">
+{r['曲名']}
+</h3>
+
+<div>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
+
+<p style="margin:0 0 6px 0;">
+声部：<span style="color:{color};">{r['声部']}</span>
+</p>
+
+<span style="
+display:inline-block;
+padding:3px 9px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:13px;
+">
+{r['区分']}
+</span>
+
+<a href="{r['url']}" target="_blank"
+style="
+display:block;
+margin-top:12px;
+text-align:center;
+padding:9px;
+border-radius:8px;
+background:#e5e7eb;
+color:{TEXT_COLOR};
+text-decoration:none;
+font-weight:600;
+">
+楽譜を開く
+</a>
+</div>
+</div>
+""",
+                unsafe_allow_html=True
+            )
