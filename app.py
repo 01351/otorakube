@@ -166,7 +166,7 @@ else:
 
             st.caption("▼ 詳細条件")
 
-            # --- 声部（動的取得 & すべて選択） ---
+            # --- 声部設定 ---
             st.markdown("**声部**")
 
             def part_sort_key(part):
@@ -181,60 +181,71 @@ else:
 
             existing_parts = sorted(df["声部"].dropna().unique().tolist(), key=part_sort_key)
 
-            # セッション状態初期化
+            # --- 声部の連動ロジック ---
+            def on_change_all_part():
+                new_val = st.session_state[f"all_part_{current_folder}"]
+                for p in existing_parts:
+                    st.session_state[f"part_{current_folder}_{p}"] = new_val
+
+            def on_change_individual_part():
+                is_all_checked = all(st.session_state[f"part_{current_folder}_{p}"] for p in existing_parts)
+                st.session_state[f"all_part_{current_folder}"] = is_all_checked
+
+            # セッション状態の初期化
             if f"init_part_{current_folder}" not in st.session_state:
                 st.session_state[f"all_part_{current_folder}"] = True
                 for p in existing_parts:
                     st.session_state[f"part_{current_folder}_{p}"] = True
                 st.session_state[f"init_part_{current_folder}"] = True
 
-            def toggle_all_part():
-                for p in existing_parts:
-                    st.session_state[f"part_{current_folder}_{p}"] = st.session_state[f"all_part_{current_folder}"]
-
-            def sync_all_part():
-                st.session_state[f"all_part_{current_folder}"] = all(
-                    st.session_state.get(f"part_{current_folder}_{p}", False) for p in existing_parts
-                )
-
-            st.checkbox("すべて選択", key=f"all_part_{current_folder}", on_change=toggle_all_part)
+            st.checkbox("すべて選択", key=f"all_part_{current_folder}", on_change=on_change_all_part)
 
             part_cols = st.columns(len(existing_parts) if len(existing_parts) > 0 else 1)
             part_checks = {}
             for col, part in zip(part_cols, existing_parts):
                 with col:
-                    part_checks[part] = st.checkbox(part, key=f"part_{current_folder}_{part}", on_change=sync_all_part)
+                    part_checks[part] = st.checkbox(
+                        part, 
+                        key=f"part_{current_folder}_{part}", 
+                        on_change=on_change_individual_part
+                    )
 
             PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
 
-            # --- 区分（動的取得 & すべて選択） ---
+            # --- 区分設定 ---
             st.markdown("**区分**")
             
-            # データ内に存在する区分のみを抽出
+            # データ内に実際に存在する区分を動的に取得
             existing_types = sorted(df["区分"].dropna().unique().tolist())
 
+            # --- 区分の連動ロジック ---
+            def on_change_all_type():
+                new_val = st.session_state[f"all_type_{current_folder}"]
+                for t in existing_types:
+                    st.session_state[f"type_{current_folder}_{t}"] = new_val
+
+            def on_change_individual_type():
+                is_all_checked = all(st.session_state[f"type_{current_folder}_{t}"] for t in existing_types)
+                st.session_state[f"all_type_{current_folder}"] = is_all_checked
+
+            # セッション状態の初期化
             if f"init_type_{current_folder}" not in st.session_state:
                 st.session_state[f"all_type_{current_folder}"] = True
                 for t in existing_types:
                     st.session_state[f"type_{current_folder}_{t}"] = True
                 st.session_state[f"init_type_{current_folder}"] = True
 
-            def toggle_all_type():
-                for t in existing_types:
-                    st.session_state[f"type_{current_folder}_{t}"] = st.session_state[f"all_type_{current_folder}"]
-
-            def sync_all_type():
-                st.session_state[f"all_type_{current_folder}"] = all(
-                    st.session_state.get(f"type_{current_folder}_{t}", False) for t in existing_types
-                )
-
-            st.checkbox("すべて選択", key=f"all_type_{current_folder}", on_change=toggle_all_type)
+            st.checkbox("すべて選択", key=f"all_type_{current_folder}", on_change=on_change_all_type)
 
             type_cols = st.columns(len(existing_types) if len(existing_types) > 0 else 1)
             type_checks = {}
             for col, t in zip(type_cols, existing_types):
                 with col:
-                    type_checks[t] = st.checkbox(t, key=f"type_{current_folder}_{t}", on_change=sync_all_type)
+                    type_checks[t] = st.checkbox(
+                        t, 
+                        key=f"type_{current_folder}_{t}", 
+                        on_change=on_change_individual_type
+                    )
 
             TYPE_ORDER = {t: i for i, t in enumerate(existing_types)}
 
@@ -296,12 +307,51 @@ row-gap:6px;
 margin-bottom:24px;
 color:{TEXT_COLOR};
 ">
-<h3 style="margin:0; font-size:20px; font-weight:700; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{r['曲名']}</h3>
+
+<h3 style="
+margin:0;
+font-size:20px;
+font-weight:700;
+line-height:1.2;
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+overflow:hidden;
+">
+{r['曲名']}
+</h3>
+
 <div>
 <p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
-<p style="margin:0 0 6px 0;">声部：<span style="color:{color};">{r['声部']}</span></p>
-<span style="display:inline-block; padding:3px 9px; border-radius:999px; background:#f1f5f9; font-size:13px;">{r['区分']}</span>
-<a href="{r['url']}" target="_blank" style="display:block; margin-top:12px; text-align:center; padding:9px; border-radius:8px; background:#e5e7eb; color:{TEXT_COLOR}; text-decoration:none; font-weight:600;">楽譜を開く</a>
+
+<p style="margin:0 0 6px 0;">
+声部：<span style="color:{color};">{r['声部']}</span>
+</p>
+
+<span style="
+display:inline-block;
+padding:3px 9px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:13px;
+">
+{r['区分']}
+</span>
+
+<a href="{r['url']}" target="_blank"
+style="
+display:block;
+margin-top:12px;
+text-align:center;
+padding:9px;
+border-radius:8px;
+background:#e5e7eb;
+color:{TEXT_COLOR};
+text-decoration:none;
+font-weight:600;
+">
+楽譜を開く
+</a>
 </div>
 </div>
 """, unsafe_allow_html=True)
