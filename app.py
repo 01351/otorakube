@@ -189,3 +189,120 @@ tab_labels = list(tabs_data.keys())
 tabs = st.tabs(tab_labels)
 
 # ====== ここから先は part2 ======
+# =========================
+# 共通：検索UI
+# =========================
+
+with st.sidebar:
+    st.subheader("🔍 検索条件")
+
+    keyword = st.text_input("曲名キーワード", "")
+
+    # 全タブ共通で使うため、列が存在する前提を守る
+    all_df_for_filter = tabs_data["すべての楽譜"]
+
+    composer_list = (
+        sorted(all_df_for_filter["作曲・編曲者"].dropna().unique().tolist())
+        if "作曲・編曲者" in all_df_for_filter.columns
+        else []
+    )
+    composer = st.multiselect("作曲・編曲者", composer_list)
+
+    part_list = (
+        sorted(all_df_for_filter["声部"].dropna().unique().tolist())
+        if "声部" in all_df_for_filter.columns
+        else []
+    )
+    part = st.multiselect("声部", part_list)
+
+    type_list = (
+        sorted(all_df_for_filter["区分"].dropna().unique().tolist())
+        if "区分" in all_df_for_filter.columns
+        else []
+    )
+    score_type = st.multiselect("区分", type_list)
+
+# =========================
+# 検索関数
+# =========================
+
+def apply_filter(df):
+    if df.empty:
+        return df
+
+    filtered = df.copy()
+
+    if keyword:
+        filtered = filtered[filtered["曲名"].str.contains(keyword, case=False, na=False)]
+
+    if composer:
+        filtered = filtered[filtered["作曲・編曲者"].isin(composer)]
+
+    if part:
+        filtered = filtered[filtered["声部"].isin(part)]
+
+    if score_type:
+        filtered = filtered[filtered["区分"].isin(score_type)]
+
+    return filtered
+
+# =========================
+# カード表示
+# =========================
+
+def render_cards(df):
+    if df.empty:
+        st.info("該当する楽譜がありません")
+        return
+
+    cols = st.columns(4)
+
+    for i, (_, row) in enumerate(df.iterrows()):
+        with cols[i % 4]:
+            color = PART_COLOR.get(row["声部"].replace("二部", "").replace("三部", "").replace("四部", ""), "#64748b")
+
+            st.markdown(
+                f"""
+                <div style="
+                    border:1px solid #e5e7eb;
+                    border-radius:10px;
+                    padding:12px;
+                    margin-bottom:12px;
+                ">
+                    <div style="font-size:14px; color:#475569;">
+                        {row["区分"]}
+                    </div>
+                    <div style="font-size:18px; font-weight:700; color:{TEXT_COLOR};">
+                        {row["曲名"]}
+                    </div>
+                    <div style="margin-top:4px; font-size:14px;">
+                        {row["作曲・編曲者"]}
+                    </div>
+                    <div style="
+                        display:inline-block;
+                        margin-top:6px;
+                        padding:2px 8px;
+                        border-radius:999px;
+                        background:{color};
+                        color:white;
+                        font-size:12px;
+                    ">
+                        {row["声部"]}
+                    </div>
+                    <div style="margin-top:10px;">
+                        <a href="{row["url"]}" target="_blank">📄 PDFを開く</a>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+# =========================
+# タブごとの描画
+# =========================
+
+for tab, label in zip(tabs, tab_labels):
+    with tab:
+        df = tabs_data[label]
+        filtered_df = apply_filter(df)
+        render_cards(filtered_df)
