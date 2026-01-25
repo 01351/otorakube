@@ -27,7 +27,7 @@ st.caption("Google Drive 上の楽譜PDFを検索できます")
 # =========================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-ROOT_FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
@@ -89,39 +89,20 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 接続
+# Google Drive 読み込み
 # =========================
 
-@st.cache_resource
-def get_drive_service():
+@st.cache_data(ttl=60, show_spinner=False)
+def load_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
     )
-    return build("drive", "v3", credentials=credentials)
 
-service = get_drive_service()
+    service = build("drive", "v3", credentials=credentials)
 
-# =========================
-# 子フォルダ取得
-# =========================
-
-@st.cache_data(ttl=300)
-def load_subfolders(parent_id):
     results = service.files().list(
-        q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
-        fields="files(id, name)"
-    ).execute()
-    return results.get("files", [])
-
-# =========================
-# PDF読み込み
-# =========================
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_from_drive(folder_id):
-    results = service.files().list(
-        q=f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'",
+        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
         fields="files(name, webViewLink)"
     ).execute()
 
@@ -137,243 +118,192 @@ def load_from_drive(folder_id):
 
     return df
 
-# =========================
-# タブ作成（子フォルダ）
-# =========================
+df = load_from_drive()
 
-subfolders = load_subfolders(ROOT_FOLDER_ID)
-if not subfolders:
-    st.warning("子フォルダが見つかりません")
-    st.stop()
-
-tabs = st.tabs([f["name"] for f in subfolders])
 # =========================
-# タブ内検索・UI処理
+# 検索UI
 # =========================
 
-for tab, folder in zip(tabs, subfolders):
-    with tab:
-        df = load_from_drive(folder["id"])
+st.divider()
+st.subheader("検索")
 
-        st.subheader(f"📁 {folder['name']}")
+col1, col2 = st.columns([2, 1])
+with col1:
+    title_input = st.text_input("🎵 曲名（部分一致）")
+with col2:
+    composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
+    composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list)
 
-        if df.empty:
-            st.info("このフォルダには表示可能な楽譜がありません")
-            continue
+st.caption("▼ 詳細条件")
 
-        # =========================
-        # 検索UI
-        # =========================
+# =========================
+# 声部（チェックボックス）
+# =========================
 
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            title_input = st.text_input(
-                "🎵 曲名（部分一致）",
-                key=f"title_{folder['id']}"
-            )
-        with col2:
-            composer_list = sorted(
-                df["作曲・編曲者"].dropna().unique().tolist()
-            )
-            composer_input = st.selectbox(
-                "👤 作曲・編曲者",
-                ["指定しない"] + composer_list,
-                key=f"composer_{folder['id']}"
-            )
+st.markdown("**声部**")
 
-        st.caption("▼ 詳細条件")
+def part_sort_key(part):
+    base = re.sub(r"(二部|三部|四部)", "", part)
+    num = re.search(r"(二部|三部|四部)", part)
 
-        # =========================
-        # 声部チェックボックス
-        # =========================
+    base_order = ["混声", "女声", "男声", "斉唱"]
+    num_order = ["二部", "三部", "四部"]
 
-        st.markdown("**声部**")
+    return (
+        base_order.index(base) if base in base_order else 99,
+        num_order.index(num.group()) if num else 99
+    )
 
-        def part_sort_key(part):
-            base = re.sub(r"(二部|三部|四部)", "", part)
-            num = re.search(r"(二部|三部|四部)", part)
+existing_parts = sorted(
+    df["声部"].dropna().unique().tolist(),
+    key=part_sort_key
+)
 
-            base_order = ["混声", "女声", "男声", "斉唱"]
-            num_order = ["二部", "三部", "四部"]
+if "initialized_part" not in st.session_state:
+    st.session_state["all_part"] = True
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = True
+    st.session_state["initialized_part"] = True
 
-            return (
-                base_order.index(base) if base in base_order else 99,
-                num_order.index(num.group()) if num else 99
-            )
+def toggle_all_part():
+    for p in existing_parts:
+        st.session_state[f"part_{p}"] = st.session_state["all_part"]
 
-        existing_parts = sorted(
-            df["声部"].dropna().unique().tolist(),
-            key=part_sort_key
+def sync_all_part():
+    st.session_state["all_part"] = all(
+        st.session_state.get(f"part_{p}", False) for p in existing_parts
+    )
+
+st.checkbox("すべて選択", key="all_part", on_change=toggle_all_part)
+
+part_cols = st.columns(len(existing_parts))
+part_checks = {}
+
+for col, part in zip(part_cols, existing_parts):
+    with col:
+        part_checks[part] = st.checkbox(
+            part,
+            key=f"part_{part}",
+            on_change=sync_all_part
         )
 
-        # session_state 初期化
-        if f"initialized_part_{folder['id']}" not in st.session_state:
-            st.session_state[f"all_part_{folder['id']}"] = True
-            for p in existing_parts:
-                st.session_state[f"part_{folder['id']}_{p}"] = True
-            st.session_state[f"initialized_part_{folder['id']}"] = True
+PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
 
-        # =========================
-        # 安全版 toggle_all_part
-        # =========================
+# =========================
+# 区分（チェックボックス）
+# =========================
 
-        def toggle_all_part():
-            for p in existing_parts:
-                key = f"part_{folder['id']}_{p}"
-                if key not in st.session_state:
-                    st.session_state[key] = True
-                st.session_state[key] = st.session_state[f"all_part_{folder['id']}"]
+st.markdown("**区分**")
+type_labels = list(TYPE_MAP.values())
 
-        def sync_all_part():
-            st.session_state[f"all_part_{folder['id']}"] = all(
-                st.session_state.get(f"part_{folder['id']}_{p}", False) for p in existing_parts
-            )
+if "initialized_type" not in st.session_state:
+    st.session_state["all_type"] = True
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = True
+    st.session_state["initialized_type"] = True
 
-        st.checkbox(
-            "すべて選択",
-            key=f"all_part_{folder['id']}",
-            on_change=toggle_all_part
+def toggle_all_type():
+    for t in type_labels:
+        st.session_state[f"type_{t}"] = st.session_state["all_type"]
+
+def sync_all_type():
+    st.session_state["all_type"] = all(
+        st.session_state.get(f"type_{t}", False) for t in type_labels
+    )
+
+st.checkbox("すべて選択", key="all_type", on_change=toggle_all_type)
+
+type_cols = st.columns(len(type_labels))
+type_checks = {}
+
+for col, t in zip(type_cols, type_labels):
+    with col:
+        type_checks[t] = st.checkbox(
+            t,
+            key=f"type_{t}",
+            on_change=sync_all_type
         )
 
-        part_cols = st.columns(len(existing_parts))
-        part_checks = {}
+TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
 
-        for col, part in zip(part_cols, existing_parts):
-            with col:
-                part_checks[part] = st.checkbox(
-                    part,
-                    key=f"part_{folder['id']}_{part}",
-                    on_change=sync_all_part
-                )
+# =========================
+# 並び替えUI（検索と分離）
+# =========================
 
-        PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
+st.divider()
+st.markdown("### 🔃 並び替え")
 
-        # =========================
-        # 区分チェックボックス
-        # =========================
+sort_col1, sort_col2 = st.columns([3, 2])
 
-        st.markdown("**区分**")
-        type_labels = list(TYPE_MAP.values())
+with sort_col1:
+    sort_key = st.selectbox(
+        "並び替え項目",
+        ["曲名（五十音順）", "声部", "区分"],
+        index=0   # 初期：曲名（五十音順）
+    )
 
-        if f"initialized_type_{folder['id']}" not in st.session_state:
-            st.session_state[f"all_type_{folder['id']}"] = True
-            for t in type_labels:
-                st.session_state[f"type_{folder['id']}_{t}"] = True
-            st.session_state[f"initialized_type_{folder['id']}"] = True
+with sort_col2:
+    sort_order = st.radio(
+        "順序",
+        ["昇順", "降順"],
+        horizontal=True,
+        index=0   # 初期：昇順
+    )
 
-        # =========================
-        # 安全版 toggle_all_type
-        # =========================
+# =========================
+# 検索処理
+# =========================
 
-        def toggle_all_type():
-            for t in type_labels:
-                key = f"type_{folder['id']}_{t}"
-                if key not in st.session_state:
-                    st.session_state[key] = True
-                st.session_state[key] = st.session_state[f"all_type_{folder['id']}"]
+filtered_df = df.copy()
 
-        def sync_all_type():
-            st.session_state[f"all_type_{folder['id']}"] = all(
-                st.session_state.get(f"type_{folder['id']}_{t}", False) for t in type_labels
-            )
+if title_input:
+    filtered_df = filtered_df[
+        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+    ]
 
-        st.checkbox(
-            "すべて選択",
-            key=f"all_type_{folder['id']}",
-            on_change=toggle_all_type
-        )
+if composer_input != "指定しない":
+    filtered_df = filtered_df[
+        filtered_df["作曲・編曲者"] == composer_input
+    ]
 
-        type_cols = st.columns(len(type_labels))
-        type_checks = {}
+filtered_df = filtered_df[
+    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
+]
 
-        for col, t in zip(type_cols, type_labels):
-            with col:
-                type_checks[t] = st.checkbox(
-                    t,
-                    key=f"type_{folder['id']}_{t}",
-                    on_change=sync_all_type
-                )
+filtered_df = filtered_df[
+    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
+]
 
-        TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
+ascending = sort_order == "昇順"
 
-        # =========================
-        # 並び替えUI
-        # =========================
+if sort_key == "曲名（五十音順）":
+    filtered_df = filtered_df.sort_values("code", ascending=ascending)
 
-        st.divider()
-        st.markdown("### 🔃 並び替え")
+elif sort_key == "声部":
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["声部"].map(PART_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
 
-        sort_col1, sort_col2 = st.columns([3, 2])
+elif sort_key == "区分":
+    filtered_df = (
+        filtered_df
+        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+        .sort_values("_order", ascending=ascending)
+        .drop(columns="_order")
+    )
 
-        with sort_col1:
-            sort_key = st.selectbox(
-                "並び替え項目",
-                ["曲名（五十音順）", "声部", "区分"],
-                index=0,
-                key=f"sort_key_{folder['id']}"
-            )
+# =========================
+# 検索結果
+# =========================
 
-        with sort_col2:
-            sort_order = st.radio(
-                "順序",
-                ["昇順", "降順"],
-                horizontal=True,
-                index=0,
-                key=f"sort_order_{folder['id']}"
-            )
+st.divider()
+st.subheader("検索結果")
 
-        # =========================
-        # 検索処理
-        # =========================
-
-        filtered_df = df.copy()
-
-        if title_input:
-            filtered_df = filtered_df[
-                filtered_df["曲名"].str.contains(title_input, case=False, na=False)
-            ]
-
-        if composer_input != "指定しない":
-            filtered_df = filtered_df[
-                filtered_df["作曲・編曲者"] == composer_input
-            ]
-
-        filtered_df = filtered_df[
-            filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
-        ]
-
-        filtered_df = filtered_df[
-            filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
-        ]
-
-        ascending = sort_order == "昇順"
-
-        if sort_key == "曲名（五十音順）":
-            filtered_df = filtered_df.sort_values("code", ascending=ascending)
-        elif sort_key == "声部":
-            filtered_df = (
-                filtered_df
-                .assign(_order=filtered_df["声部"].map(PART_ORDER))
-                .sort_values("_order", ascending=ascending)
-                .drop(columns="_order")
-            )
-        elif sort_key == "区分":
-            filtered_df = (
-                filtered_df
-                .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
-                .sort_values("_order", ascending=ascending)
-                .drop(columns="_order")
-            )
-
-        # =========================
-        # 検索結果表示
-        # =========================
-
-        st.divider()
-        st.subheader("検索結果")
-
-        st.markdown(
-            f"""
+st.markdown(
+    f"""
 <div style="
 font-size:22px;
 font-weight:800;
@@ -384,38 +314,37 @@ margin-bottom:12px;
 検索結果： {len(filtered_df)} 件
 </div>
 """,
-            unsafe_allow_html=True
-        )
+    unsafe_allow_html=True
+)
 
-        if filtered_df.empty:
-            st.info("条件に一致する楽譜がありません")
+if filtered_df.empty:
+    st.info("条件に一致する楽譜がありません")
+
+# =========================
+# カード表示
+# =========================
+
+cards_per_row = 3
+rows = [
+    filtered_df.iloc[i:i + cards_per_row]
+    for i in range(0, len(filtered_df), cards_per_row)
+]
+
+for row_df in rows:
+    cols = st.columns(cards_per_row)
+
+    for i in range(cards_per_row):
+        if i >= len(row_df):
+            with cols[i]:
+                st.empty()
             continue
 
-        # =========================
-        # カード表示
-        # =========================
+        r = row_df.iloc[i]
+        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+        color = PART_COLOR.get(base_part, "#64748b")
 
-        cards_per_row = 3
-        rows = [
-            filtered_df.iloc[i:i + cards_per_row]
-            for i in range(0, len(filtered_df), cards_per_row)
-        ]
-
-        for row_df in rows:
-            cols = st.columns(cards_per_row)
-
-            for i in range(cards_per_row):
-                if i >= len(row_df):
-                    with cols[i]:
-                        st.empty()
-                    continue
-
-                r = row_df.iloc[i]
-                base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-                color = PART_COLOR.get(base_part, "#64748b")
-
-                with cols[i]:
-                    st.markdown(
+        with cols[i]:
+            st.markdown(
 f"""
 <div style="
 border-left:8px solid {color};
@@ -444,15 +373,10 @@ overflow:hidden;
 </h3>
 
 <div>
-<p style="margin:0 0 6px 0;">
-作曲・編曲者：{r['作曲・編曲者']}
-</p>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
 
 <p style="margin:0 0 6px 0;">
-声部：
-<span style="color:{color};">
-{r['声部']}
-</span>
+声部：<span style="color:{color};">{r['声部']}</span>
 </p>
 
 <span style="
@@ -482,5 +406,5 @@ font-weight:600;
 </div>
 </div>
 """,
-                        unsafe_allow_html=True
-                    )
+                unsafe_allow_html=True
+            )
