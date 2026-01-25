@@ -119,6 +119,8 @@ def load_from_drive():
     return df
 
 df = load_from_drive()
+st.write("DEBUG rows:", rows)
+st.write("DEBUG df columns:", df.columns)
 
 # =========================
 # 検索UI
