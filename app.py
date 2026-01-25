@@ -153,7 +153,9 @@ else:
         with tab:
             df = df_all[df_all["folder_name"] == current_folder].copy()
 
-            # --- 検索UI ---
+            # ---------------------------
+            # 検索ヘッダー
+            # ---------------------------
             st.divider()
             st.subheader(f"検索（{current_folder}）")
 
@@ -166,9 +168,12 @@ else:
 
             st.caption("▼ 詳細条件")
 
-            # --- 声部（すべて選択の連動） ---
+            # ---------------------------
+            # 声部 (Part) ロジック
+            # ---------------------------
             st.markdown("**声部**")
 
+            # 並び替え用キー関数
             def part_sort_key(part):
                 base = re.sub(r"(二部|三部|四部)", "", part)
                 num = re.search(r"(二部|三部|四部)", part)
@@ -180,89 +185,119 @@ else:
                 )
 
             existing_parts = sorted(df["声部"].dropna().unique().tolist(), key=part_sort_key)
-
-            def toggle_all_parts():
-                val = st.session_state[f"all_part_{current_folder}"]
+            
+            # --- コールバック関数定義 ---
+            # 「すべて選択」が押された時：個別を一括更新
+            def cb_toggle_all_parts():
+                all_checked = st.session_state[f"all_part_{current_folder}"]
                 for p in existing_parts:
-                    st.session_state[f"p_check_{current_folder}_{p}"] = val
+                    st.session_state[f"part_{current_folder}_{p}"] = all_checked
 
-            def sync_all_parts():
-                st.session_state[f"all_part_{current_folder}"] = all(
-                    st.session_state[f"p_check_{current_folder}_{p}"] for p in existing_parts
-                )
+            # 個別が押された時：「すべて選択」の状態を更新
+            def cb_sync_part_master():
+                # 個別が全部TrueならMasterもTrue、一つでもFalseならMasterはFalse
+                all_checked = all(st.session_state[f"part_{current_folder}_{p}"] for p in existing_parts)
+                st.session_state[f"all_part_{current_folder}"] = all_checked
 
-            # 初期化
+            # --- 初期化 (存在しない場合のみTrueを入れる) ---
             if f"all_part_{current_folder}" not in st.session_state:
                 st.session_state[f"all_part_{current_folder}"] = True
-                for p in existing_parts:
-                    st.session_state[f"p_check_{current_folder}_{p}"] = True
+            
+            for p in existing_parts:
+                if f"part_{current_folder}_{p}" not in st.session_state:
+                    st.session_state[f"part_{current_folder}_{p}"] = True
 
-            st.checkbox("すべて選択", key=f"all_part_{current_folder}", on_change=toggle_all_parts)
+            # --- UI描画 ---
+            st.checkbox("すべて選択", key=f"all_part_{current_folder}", on_change=cb_toggle_all_parts)
             
             p_cols = st.columns(len(existing_parts) if existing_parts else 1)
             selected_parts = []
+            
             for col, p in zip(p_cols, existing_parts):
-                if col.checkbox(p, key=f"p_check_{current_folder}_{p}", on_change=sync_all_parts):
-                    selected_parts.append(p)
+                with col:
+                    # 個別チェックボックス
+                    st.checkbox(p, key=f"part_{current_folder}_{p}", on_change=cb_sync_part_master)
+                    
+                    # フィルタリング用のリスト作成 (UI描画と同時に現在のStateを見て判定)
+                    if st.session_state[f"part_{current_folder}_{p}"]:
+                        selected_parts.append(p)
 
-            # --- 区分（PDFから動的に取得 & すべて選択の連動） ---
+            # ---------------------------
+            # 区分 (Type) ロジック
+            # ---------------------------
             st.markdown("**区分**")
             existing_types = sorted(df["区分"].dropna().unique().tolist())
 
-            def toggle_all_types():
-                val = st.session_state[f"all_type_{current_folder}"]
+            # --- コールバック関数定義 ---
+            def cb_toggle_all_types():
+                all_checked = st.session_state[f"all_type_{current_folder}"]
                 for t in existing_types:
-                    st.session_state[f"t_check_{current_folder}_{t}"] = val
+                    st.session_state[f"type_{current_folder}_{t}"] = all_checked
 
-            def sync_all_types():
-                st.session_state[f"all_type_{current_folder}"] = all(
-                    st.session_state[f"t_check_{current_folder}_{t}"] for t in existing_types
-                )
+            def cb_sync_type_master():
+                all_checked = all(st.session_state[f"type_{current_folder}_{t}"] for t in existing_types)
+                st.session_state[f"all_type_{current_folder}"] = all_checked
 
-            # 初期化
+            # --- 初期化 ---
             if f"all_type_{current_folder}" not in st.session_state:
                 st.session_state[f"all_type_{current_folder}"] = True
-                for t in existing_types:
-                    st.session_state[f"t_check_{current_folder}_{t}"] = True
+            
+            for t in existing_types:
+                if f"type_{current_folder}_{t}" not in st.session_state:
+                    st.session_state[f"type_{current_folder}_{t}"] = True
 
-            st.checkbox("すべて選択", key=f"all_type_{current_folder}", on_change=toggle_all_types)
+            # --- UI描画 ---
+            st.checkbox("すべて選択", key=f"all_type_{current_folder}", on_change=cb_toggle_all_types)
             
             t_cols = st.columns(len(existing_types) if existing_types else 1)
             selected_types = []
+            
             for col, t in zip(t_cols, existing_types):
-                if col.checkbox(t, key=f"t_check_{current_folder}_{t}", on_change=sync_all_types):
-                    selected_types.append(t)
+                with col:
+                    st.checkbox(t, key=f"type_{current_folder}_{t}", on_change=cb_sync_type_master)
+                    
+                    if st.session_state[f"type_{current_folder}_{t}"]:
+                        selected_types.append(t)
 
-            # --- 並び替え ---
+            # ---------------------------
+            # 並び替え & フィルタリング実行
+            # ---------------------------
             st.divider()
             st.markdown("### 🔃 並び替え")
+            
             sort_col1, sort_col2 = st.columns([3, 2])
             with sort_col1:
                 sort_key = st.selectbox("並び替え項目", ["曲名（五十音順）", "声部", "区分"], key=f"s_key_{current_folder}")
             with sort_col2:
                 sort_order = st.radio("順序", ["昇順", "降順"], horizontal=True, key=f"s_order_{current_folder}")
 
-            # --- フィルタリング ---
             filtered_df = df.copy()
+            
+            # テキスト検索
             if title_input:
                 filtered_df = filtered_df[filtered_df["曲名"].str.contains(title_input, case=False, na=False)]
             if composer_input != "指定しない":
                 filtered_df = filtered_df[filtered_df["作曲・編曲者"] == composer_input]
             
+            # チェックボックスによるフィルタ
             filtered_df = filtered_df[filtered_df["声部"].isin(selected_parts)]
             filtered_df = filtered_df[filtered_df["区分"].isin(selected_types)]
 
+            # 並び替え
             ascending = (sort_order == "昇順")
+            PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
+            TYPE_ORDER = {t: i for i, t in enumerate(existing_types)}
+
             if sort_key == "曲名（五十音順）":
                 filtered_df = filtered_df.sort_values("code", ascending=ascending)
             elif sort_key == "声部":
-                part_order_map = {p: idx for idx, p in enumerate(existing_parts)}
-                filtered_df = filtered_df.assign(_order=filtered_df["声部"].map(part_order_map)).sort_values("_order", ascending=ascending).drop(columns="_order")
+                filtered_df = filtered_df.assign(_order=filtered_df["声部"].map(PART_ORDER)).sort_values("_order", ascending=ascending).drop(columns="_order")
             elif sort_key == "区分":
-                type_order_map = {t: idx for idx, t in enumerate(existing_types)}
-                filtered_df = filtered_df.assign(_order=filtered_df["区分"].map(type_order_map)).sort_values("_order", ascending=ascending).drop(columns="_order")
+                filtered_df = filtered_df.assign(_order=filtered_df["区分"].map(TYPE_ORDER)).sort_values("_order", ascending=ascending).drop(columns="_order")
 
-            # --- 結果表示 ---
+            # ---------------------------
+            # 結果表示 (カード)
+            # ---------------------------
             st.divider()
             st.markdown(f'<div style="font-size:22px; font-weight:800; border-bottom:3px solid #6366f1; padding-bottom:6px; margin-bottom:12px;">検索結果： {len(filtered_df)} 件</div>', unsafe_allow_html=True)
 
