@@ -380,3 +380,150 @@ def render_search_and_sort(df):
         )
 
     return filtered_df
+# =========================
+# タブ表示（すべての楽譜 + 子フォルダ）
+# =========================
+
+st.divider()
+st.header("📚 楽譜一覧")
+
+# tabs_data:
+# {
+#   "すべての楽譜": DataFrame,
+#   "フォルダ名1": DataFrame,
+#   "フォルダ名2": DataFrame,
+#   ...
+# }
+tab_labels = list(tabs_data.keys())
+tabs = st.tabs(tab_labels)
+
+for tab, tab_name in zip(tabs, tab_labels):
+    with tab:
+
+        df_target = tabs_data[tab_name]
+
+        # =========================
+        # 検索 & 並び替え
+        # =========================
+
+        filtered_df = render_search_and_sort(df_target)
+
+        # =========================
+        # 検索結果ヘッダ
+        # =========================
+
+        st.divider()
+        st.subheader("検索結果")
+
+        st.markdown(
+            f"""
+<div style="
+font-size:22px;
+font-weight:800;
+border-bottom:3px solid #6366f1;
+padding-bottom:6px;
+margin-bottom:12px;
+">
+{tab_name}： {len(filtered_df)} 件
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+        if filtered_df.empty:
+            st.info("条件に一致する楽譜がありません")
+            continue
+
+        # =========================
+        # カード表示（元仕様準拠）
+        # =========================
+
+        cards_per_row = 3
+        rows = [
+            filtered_df.iloc[i:i + cards_per_row]
+            for i in range(0, len(filtered_df), cards_per_row)
+        ]
+
+        for row_df in rows:
+            cols = st.columns(cards_per_row)
+
+            for i in range(cards_per_row):
+                if i >= len(row_df):
+                    with cols[i]:
+                        st.empty()
+                    continue
+
+                r = row_df.iloc[i]
+                base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
+                color = PART_COLOR.get(base_part, "#64748b")
+
+                with cols[i]:
+                    st.markdown(
+f"""
+<div style="
+border-left:8px solid {color};
+padding:14px;
+border-radius:12px;
+background:#ffffff;
+height:260px;
+display:grid;
+grid-template-rows:72px 1fr;
+row-gap:6px;
+margin-bottom:24px;
+color:{TEXT_COLOR};
+">
+
+<h3 style="
+margin:0;
+font-size:20px;
+font-weight:700;
+line-height:1.2;
+display:-webkit-box;
+-webkit-line-clamp:2;
+-webkit-box-orient:vertical;
+overflow:hidden;
+">
+{r['曲名']}
+</h3>
+
+<div>
+<p style="margin:0 0 6px 0;">
+作曲・編曲者：{r['作曲・編曲者']}
+</p>
+
+<p style="margin:0 0 6px 0;">
+声部：
+<span style="color:{color};">
+{r['声部']}
+</span>
+</p>
+
+<span style="
+display:inline-block;
+padding:3px 9px;
+border-radius:999px;
+background:#f1f5f9;
+font-size:13px;
+">
+{r['区分']}
+</span>
+
+<a href="{r['url']}" target="_blank"
+style="
+display:block;
+margin-top:12px;
+text-align:center;
+padding:9px;
+border-radius:8px;
+background:#e5e7eb;
+color:{TEXT_COLOR};
+text-decoration:none;
+font-weight:600;
+">
+楽譜を開く
+</a>
+</div>
+</div>
+""",
+                        unsafe_allow_html=True
+                    )
