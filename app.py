@@ -186,3 +186,116 @@ folder_df_map, df_all_scores = build_folder_dataframe_map()
 #
 # df_all_scores:
 #   全フォルダ横断 DataFrame
+# =========================
+# Part 2
+# タブUI & 検索UI
+# =========================
+
+# ※ Part1 で生成された以下を使う前提
+# folder_df_map : dict[str, DataFrame]
+# df_all_scores : DataFrame
+
+st.subheader("🔍 楽譜検索")
+
+# =========================
+# 検索UI（共通）
+# =========================
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    keyword_title = st.text_input("曲名")
+
+with col2:
+    keyword_composer = st.text_input("作曲・編曲者")
+
+with col3:
+    part_filter = st.selectbox(
+        "声部",
+        ["すべて"] + sorted(df_all_scores["声部"].dropna().unique().tolist())
+        if not df_all_scores.empty else ["すべて"]
+    )
+
+with col4:
+    type_filter = st.selectbox(
+        "区分",
+        ["すべて"] + sorted(df_all_scores["区分"].dropna().unique().tolist())
+        if not df_all_scores.empty else ["すべて"]
+    )
+
+# =========================
+# 検索処理関数（共通）
+# =========================
+
+def apply_filter(df):
+    if df.empty:
+        return df
+
+    filtered = df.copy()
+
+    if keyword_title:
+        filtered = filtered[
+            filtered["曲名"].str.contains(keyword_title, case=False, na=False)
+        ]
+
+    if keyword_composer:
+        filtered = filtered[
+            filtered["作曲・編曲者"].str.contains(keyword_composer, case=False, na=False)
+        ]
+
+    if part_filter != "すべて":
+        filtered = filtered[filtered["声部"] == part_filter]
+
+    if type_filter != "すべて":
+        filtered = filtered[filtered["区分"] == type_filter]
+
+    return filtered
+
+# =========================
+# タブ構成
+# =========================
+
+tab_names = ["すべての楽譜"] + list(folder_df_map.keys())
+tabs = st.tabs(tab_names)
+
+# =========================
+# すべての楽譜 タブ
+# =========================
+
+with tabs[0]:
+    st.markdown("### 📚 すべての楽譜")
+
+    df_filtered = apply_filter(df_all_scores)
+
+    st.caption(f"{len(df_filtered)} 件")
+
+    if df_filtered.empty:
+        st.info("該当する楽譜がありません")
+    else:
+        st.dataframe(
+            df_filtered[["曲名", "作曲・編曲者", "声部", "区分"]],
+            use_container_width=True,
+            hide_index=True
+        )
+
+# =========================
+# 各子フォルダタブ
+# =========================
+
+for i, folder_name in enumerate(folder_df_map.keys(), start=1):
+    with tabs[i]:
+        st.markdown(f"### 📁 {folder_name}")
+
+        df_folder = folder_df_map[folder_name]
+        df_filtered = apply_filter(df_folder)
+
+        st.caption(f"{len(df_filtered)} 件")
+
+        if df_filtered.empty:
+            st.info("このフォルダに該当する楽譜はありません")
+        else:
+            st.dataframe(
+                df_filtered[["曲名", "作曲・編曲者", "声部", "区分"]],
+                use_container_width=True,
+                hide_index=True
+            )
