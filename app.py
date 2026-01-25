@@ -27,6 +27,8 @@ st.caption("Google Drive 上の楽譜PDFを検索できます")
 # =========================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+# 親フォルダ（この直下に子フォルダが3つある想定）
 FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
@@ -101,16 +103,30 @@ def load_from_drive():
 
     service = build("drive", "v3", credentials=credentials)
 
-    results = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
-    ).execute()
-
     rows = []
-    for f in results.get("files", []):
-        parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+
+    # --- ① 親フォルダ直下の「子フォルダ」を取得 ---
+    child_folders = service.files().list(
+        q=f"'{FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+        fields="files(id, name)"
+    ).execute().get("files", [])
+
+    # --- ② 各子フォルダ内のPDFを取得 ---
+    for folder in child_folders:
+        folder_id = folder["id"]
+
+        results = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'",
+            fields="files(name, webViewLink)"
+        ).execute()
+
+        for f in results.get("files", []):
+            parsed = parse_filename(f["name"])
+            if parsed:
+                rows.append({
+                    **parsed,
+                    "url": f["webViewLink"]
+                })
 
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -227,7 +243,7 @@ for col, t in zip(type_cols, type_labels):
 TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
 
 # =========================
-# 並び替えUI（検索と分離）
+# 並び替えUI
 # =========================
 
 st.divider()
@@ -239,7 +255,7 @@ with sort_col1:
     sort_key = st.selectbox(
         "並び替え項目",
         ["曲名（五十音順）", "声部", "区分"],
-        index=0   # 初期：曲名（五十音順）
+        index=0
     )
 
 with sort_col2:
@@ -247,7 +263,7 @@ with sort_col2:
         "順序",
         ["昇順", "降順"],
         horizontal=True,
-        index=0   # 初期：昇順
+        index=0
     )
 
 # =========================
