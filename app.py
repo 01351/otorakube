@@ -4,407 +4,293 @@
 #作曲者はサイト内にふりがなの入力リストを作って、新規の作曲者も追加できるように
 #検索の作曲者は五十音順に並び替え、リストにない作曲者は上に表示
 
+# ==================================================
+# 楽譜管理アプリ（Google Drive / 子フォルダ対応）
+# KeyError対策・全文表示・堅牢版
+# ==================================================
+
 import streamlit as st
 import pandas as pd
 import re
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from typing import List, Dict
 
-# =========================
-# 基本設定
-# =========================
+# ==================================================
+# Streamlit 基本設定
+# ==================================================
 
 st.set_page_config(
-    page_title="楽譜管理システム",
-    layout="wide"
+    page_title="🎼 楽譜管理アプリ",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("楽譜管理システム")
-st.caption("Google Drive 上の楽譜PDFを検索できます")
+st.title("🎼 楽譜管理アプリ")
+st.caption("Google Drive 上の楽譜PDFを検索できます（子フォルダ対応 / KeyError対策済）")
 
-# =========================
-# Google Drive 設定
-# =========================
+# ==================================================
+# Google Drive API 設定
+# ==================================================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
-# =========================
-# 定義マップ
-# =========================
+# 親フォルダID（楽譜をまとめているフォルダ）
+PARENT_FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
-TYPE_MAP = {
-    "A": "オリジナル（伴奏有）",
-    "B": "オリジナル（無伴奏）",
-    "C": "アレンジ",
-    "D": "特殊"
-}
+# ==================================================
+# Google Drive API 初期化
+# ==================================================
 
-PART_BASE_MAP = {
-    "G": "混声",
-    "F": "女声",
-    "M": "男声",
-    "U": "斉唱"
-}
-
-NUM_MAP = {
-    "2": "二部",
-    "3": "三部",
-    "4": "四部"
-}
-
-PART_COLOR = {
-    "混声": "#16a34a",
-    "女声": "#db2777",
-    "男声": "#2563eb",
-    "斉唱": "#9333ea"
-}
-
-TEXT_COLOR = "#0f172a"
-
-# =========================
-# ファイル名解析
-# =========================
-
-def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
-    m = re.match(pattern, filename)
-    if not m:
-        return None
-
-    code, title, t, p, n, composer = m.groups()
-    composer = composer.replace("★", "").strip()
-
-    if p == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
-
-    return {
-        "code": code,
-        "曲名": title.strip(),
-        "作曲・編曲者": composer,
-        "声部": part,
-        "区分": TYPE_MAP.get(t, "不明")
-    }
-
-# =========================
-# Google Drive 読み込み
-# =========================
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_from_drive():
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+def init_drive_service():
+    credentials = service_account.Credentials.from_service_account_file(
+        "service_account.json",
         scopes=SCOPES
     )
+    return build("drive", "v3", credentials=credentials)
 
-    service = build("drive", "v3", credentials=credentials)
+service = init_drive_service()
 
+# ==================================================
+# Drive操作ユーティリティ
+# ==================================================
+
+def list_subfolders(parent_id: str) -> List[Dict]:
+    """
+    親フォルダ直下の子フォルダ一覧を取得
+    """
     results = service.files().list(
-        q=f"'{FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'",
-        fields="files(name, webViewLink)"
+        q=(
+            f"'{parent_id}' in parents "
+            "and mimeType='application/vnd.google-apps.folder' "
+            "and trashed=false"
+        ),
+        fields="files(id, name)",
+        pageSize=1000
     ).execute()
 
-    rows = []
-    for f in results.get("files", []):
-        parsed = parse_filename(f["name"])
-        if parsed:
-            rows.append({**parsed, "url": f["webViewLink"]})
+    return results.get("files", [])
 
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df.sort_values("code")
+
+def list_pdfs(folder_id: str) -> List[Dict]:
+    """
+    指定フォルダ内のPDFファイル一覧を取得
+    """
+    results = service.files().list(
+        q=(
+            f"'{folder_id}' in parents "
+            "and mimeType='application/pdf' "
+            "and trashed=false"
+        ),
+        fields="files(id, name, webViewLink)",
+        pageSize=1000
+    ).execute()
+
+    return results.get("files", [])
+
+# ==================================================
+# ファイル名解析ロジック
+# ==================================================
+
+def parse_filename(filename: str) -> Dict:
+    """
+    ファイル名を解析して情報を抽出
+    想定形式：
+      作曲者_曲名_声部.pdf
+      作曲者＿曲名＿声部.pdf（全角対応）
+    """
+
+    name = filename.replace(".pdf", "")
+
+    # 半角・全角アンダースコア両対応
+    parts = re.split(r"[_＿]", name)
+
+    composer = parts[0] if len(parts) >= 1 else ""
+    title = parts[1] if len(parts) >= 2 else ""
+    part = parts[2] if len(parts) >= 3 else ""
+
+    return {
+        "作曲・編曲者": composer.strip(),
+        "曲名": title.strip(),
+        "声部": part.strip(),
+        "ファイル名": filename
+    }
+
+# ==================================================
+# データロード（子フォルダ対応）
+# ==================================================
+
+@st.cache_data(show_spinner=True)
+def load_scores() -> pd.DataFrame:
+    records: List[Dict] = []
+
+    subfolders = list_subfolders(PARENT_FOLDER_ID)
+
+    for folder in subfolders:
+        folder_id = folder.get("id")
+        folder_name = folder.get("name")
+
+        pdf_files = list_pdfs(folder_id)
+
+        for pdf in pdf_files:
+            parsed = parse_filename(pdf.get("name", ""))
+
+            parsed.update({
+                "フォルダ名": folder_name,
+                "Driveリンク": pdf.get("webViewLink", "")
+            })
+
+            records.append(parsed)
+
+    # ★ ここが超重要：必ず列名を明示する
+    columns = [
+        "フォルダ名",
+        "作曲・編曲者",
+        "曲名",
+        "声部",
+        "ファイル名",
+        "Driveリンク"
+    ]
+
+    df = pd.DataFrame(records, columns=columns)
 
     return df
 
-df = load_from_drive()
+# ==================================================
+# データ読み込み実行
+# ==================================================
 
-# =========================
-# 検索UI
-# =========================
+df = load_scores()
 
-st.divider()
-st.subheader("検索")
+# ==================================================
+# 空データ対策
+# ==================================================
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    title_input = st.text_input("🎵 曲名（部分一致）")
-with col2:
-    composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
-    composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list)
+if df.empty:
+    st.warning("PDFが見つかりませんでした。フォルダ構成を確認してください。")
+    st.stop()
 
-st.caption("▼ 詳細条件")
+# ==================================================
+# カラム存在チェック（KeyError完全防止）
+# ==================================================
 
-# =========================
-# 声部（チェックボックス）
-# =========================
+REQUIRED_COLUMNS = [
+    "フォルダ名",
+    "作曲・編曲者",
+    "曲名",
+    "声部",
+    "ファイル名",
+    "Driveリンク"
+]
 
-st.markdown("**声部**")
+missing_cols = [c for c in REQUIRED_COLUMNS if c not in df.columns]
 
-def part_sort_key(part):
-    base = re.sub(r"(二部|三部|四部)", "", part)
-    num = re.search(r"(二部|三部|四部)", part)
+if missing_cols:
+    st.error(f"必要な列が存在しません: {missing_cols}")
+    st.write("現在の列一覧:")
+    st.write(df.columns.tolist())
+    st.stop()
 
-    base_order = ["混声", "女声", "男声", "斉唱"]
-    num_order = ["二部", "三部", "四部"]
+# ==================================================
+# サイドバー：検索UI
+# ==================================================
 
-    return (
-        base_order.index(base) if base in base_order else 99,
-        num_order.index(num.group()) if num else 99
-    )
+st.sidebar.header("🔎 検索条件")
 
-existing_parts = sorted(
-    df["声部"].dropna().unique().tolist(),
-    key=part_sort_key
+# フォルダ絞り込み
+folder_list = sorted(df["フォルダ名"].dropna().unique().tolist())
+selected_folder = st.sidebar.selectbox(
+    "📁 フォルダ",
+    ["すべて"] + folder_list
 )
 
-if "initialized_part" not in st.session_state:
-    st.session_state["all_part"] = True
-    for p in existing_parts:
-        st.session_state[f"part_{p}"] = True
-    st.session_state["initialized_part"] = True
+# 作曲・編曲者（★KeyErrorが出ていた箇所）
+composer_list = sorted(
+    df["作曲・編曲者"].dropna().unique().tolist()
+)
 
-def toggle_all_part():
-    for p in existing_parts:
-        st.session_state[f"part_{p}"] = st.session_state["all_part"]
+selected_composer = st.sidebar.selectbox(
+    "🎵 作曲・編曲者",
+    ["すべて"] + composer_list
+)
 
-def sync_all_part():
-    st.session_state["all_part"] = all(
-        st.session_state.get(f"part_{p}", False) for p in existing_parts
-    )
+# 声部
+part_list = sorted(df["声部"].dropna().unique().tolist())
+selected_part = st.sidebar.selectbox(
+    "🎤 声部",
+    ["すべて"] + part_list
+)
 
-st.checkbox("すべて選択", key="all_part", on_change=toggle_all_part)
+# キーワード検索
+keyword = st.sidebar.text_input("🔤 曲名キーワード")
 
-part_cols = st.columns(len(existing_parts))
-part_checks = {}
-
-for col, part in zip(part_cols, existing_parts):
-    with col:
-        part_checks[part] = st.checkbox(
-            part,
-            key=f"part_{part}",
-            on_change=sync_all_part
-        )
-
-PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
-
-# =========================
-# 区分（チェックボックス）
-# =========================
-
-st.markdown("**区分**")
-type_labels = list(TYPE_MAP.values())
-
-if "initialized_type" not in st.session_state:
-    st.session_state["all_type"] = True
-    for t in type_labels:
-        st.session_state[f"type_{t}"] = True
-    st.session_state["initialized_type"] = True
-
-def toggle_all_type():
-    for t in type_labels:
-        st.session_state[f"type_{t}"] = st.session_state["all_type"]
-
-def sync_all_type():
-    st.session_state["all_type"] = all(
-        st.session_state.get(f"type_{t}", False) for t in type_labels
-    )
-
-st.checkbox("すべて選択", key="all_type", on_change=toggle_all_type)
-
-type_cols = st.columns(len(type_labels))
-type_checks = {}
-
-for col, t in zip(type_cols, type_labels):
-    with col:
-        type_checks[t] = st.checkbox(
-            t,
-            key=f"type_{t}",
-            on_change=sync_all_type
-        )
-
-TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
-
-# =========================
-# 並び替えUI（検索と分離）
-# =========================
-
-st.divider()
-st.markdown("### 🔃 並び替え")
-
-sort_col1, sort_col2 = st.columns([3, 2])
-
-with sort_col1:
-    sort_key = st.selectbox(
-        "並び替え項目",
-        ["曲名（五十音順）", "声部", "区分"],
-        index=0   # 初期：曲名（五十音順）
-    )
-
-with sort_col2:
-    sort_order = st.radio(
-        "順序",
-        ["昇順", "降順"],
-        horizontal=True,
-        index=0   # 初期：昇順
-    )
-
-# =========================
-# 検索処理
-# =========================
+# ==================================================
+# フィルタ処理
+# ==================================================
 
 filtered_df = df.copy()
 
-if title_input:
+if selected_folder != "すべて":
     filtered_df = filtered_df[
-        filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+        filtered_df["フォルダ名"] == selected_folder
     ]
 
-if composer_input != "指定しない":
+if selected_composer != "すべて":
     filtered_df = filtered_df[
-        filtered_df["作曲・編曲者"] == composer_input
+        filtered_df["作曲・編曲者"] == selected_composer
     ]
 
-filtered_df = filtered_df[
-    filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
-]
+if selected_part != "すべて":
+    filtered_df = filtered_df[
+        filtered_df["声部"] == selected_part
+    ]
 
-filtered_df = filtered_df[
-    filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
-]
+if keyword:
+    filtered_df = filtered_df[
+        filtered_df["曲名"].str.contains(keyword, case=False, na=False)
+    ]
 
-ascending = sort_order == "昇順"
+# ==================================================
+# 表示用整形
+# ==================================================
 
-if sort_key == "曲名（五十音順）":
-    filtered_df = filtered_df.sort_values("code", ascending=ascending)
+# 表示順を整理
+filtered_df = filtered_df[[
+    "フォルダ名",
+    "作曲・編曲者",
+    "曲名",
+    "声部",
+    "ファイル名",
+    "Driveリンク"
+]]
 
-elif sort_key == "声部":
-    filtered_df = (
-        filtered_df
-        .assign(_order=filtered_df["声部"].map(PART_ORDER))
-        .sort_values("_order", ascending=ascending)
-        .drop(columns="_order")
-    )
+# ==================================================
+# 結果表示（全文表示）
+# ==================================================
 
-elif sort_key == "区分":
-    filtered_df = (
-        filtered_df
-        .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
-        .sort_values("_order", ascending=ascending)
-        .drop(columns="_order")
-    )
+st.subheader(f"📄 検索結果：{len(filtered_df)} 件")
 
-# =========================
-# 検索結果
-# =========================
-
-st.divider()
-st.subheader("検索結果")
-
-st.markdown(
-    f"""
-<div style="
-font-size:22px;
-font-weight:800;
-border-bottom:3px solid #6366f1;
-padding-bottom:6px;
-margin-bottom:12px;
-">
-検索結果： {len(filtered_df)} 件
-</div>
-""",
-    unsafe_allow_html=True
+st.dataframe(
+    filtered_df,
+    use_container_width=True,
+    hide_index=True
 )
 
-if filtered_df.empty:
-    st.info("条件に一致する楽譜がありません")
+# ==================================================
+# Driveリンク補助表示
+# ==================================================
 
-# =========================
-# カード表示
-# =========================
+with st.expander("🔗 Driveで開く"):
+    for _, row in filtered_df.iterrows():
+        if row["Driveリンク"]:
+            st.markdown(f"- [{row['ファイル名']}]({row['Driveリンク']})")
 
-cards_per_row = 3
-rows = [
-    filtered_df.iloc[i:i + cards_per_row]
-    for i in range(0, len(filtered_df), cards_per_row)
-]
+# ==================================================
+# デバッグ用（必要なときだけON）
+# ==================================================
 
-for row_df in rows:
-    cols = st.columns(cards_per_row)
-
-    for i in range(cards_per_row):
-        if i >= len(row_df):
-            with cols[i]:
-                st.empty()
-            continue
-
-        r = row_df.iloc[i]
-        base_part = re.sub(r"(二部|三部|四部)", "", r["声部"])
-        color = PART_COLOR.get(base_part, "#64748b")
-
-        with cols[i]:
-            st.markdown(
-f"""
-<div style="
-border-left:8px solid {color};
-padding:14px;
-border-radius:12px;
-background:#ffffff;
-height:260px;
-display:grid;
-grid-template-rows:72px 1fr;
-row-gap:6px;
-margin-bottom:24px;
-color:{TEXT_COLOR};
-">
-
-<h3 style="
-margin:0;
-font-size:20px;
-font-weight:700;
-line-height:1.2;
-display:-webkit-box;
--webkit-line-clamp:2;
--webkit-box-orient:vertical;
-overflow:hidden;
-">
-{r['曲名']}
-</h3>
-
-<div>
-<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
-
-<p style="margin:0 0 6px 0;">
-声部：<span style="color:{color};">{r['声部']}</span>
-</p>
-
-<span style="
-display:inline-block;
-padding:3px 9px;
-border-radius:999px;
-background:#f1f5f9;
-font-size:13px;
-">
-{r['区分']}
-</span>
-
-<a href="{r['url']}" target="_blank"
-style="
-display:block;
-margin-top:12px;
-text-align:center;
-padding:9px;
-border-radius:8px;
-background:#e5e7eb;
-color:{TEXT_COLOR};
-text-decoration:none;
-font-weight:600;
-">
-楽譜を開く
-</a>
-</div>
-</div>
-""",
-                unsafe_allow_html=True
-            )
+if st.sidebar.checkbox("🛠 デバッグ表示"):
+    st.write("### DataFrame 全体")
+    st.write(df)
+    st.write("### 列一覧")
+    st.write(df.columns.tolist())
