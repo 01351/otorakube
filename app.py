@@ -174,3 +174,209 @@ def load_all_folders():
     return folder_df_map, df_all
 
 folder_df_map, df_all_scores = load_all_folders()
+# =========================
+# 検索UI & 検索処理（共通関数）
+# =========================
+
+def render_search_and_sort(df):
+
+    if df.empty:
+        st.info("楽譜データがありません")
+        return df
+
+    # =========================
+    # 検索UI
+    # =========================
+
+    st.divider()
+    st.subheader("検索")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        title_input = st.text_input("🎵 曲名（部分一致）", key=f"title_{id(df)}")
+    with col2:
+        composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
+        composer_input = st.selectbox(
+            "👤 作曲・編曲者",
+            ["指定しない"] + composer_list,
+            key=f"composer_{id(df)}"
+        )
+
+    st.caption("▼ 詳細条件")
+
+    # =========================
+    # 声部（チェックボックス）
+    # =========================
+
+    st.markdown("**声部**")
+
+    def part_sort_key(part):
+        base = re.sub(r"(二部|三部|四部)", "", part)
+        num = re.search(r"(二部|三部|四部)", part)
+
+        base_order = ["混声", "女声", "男声", "斉唱"]
+        num_order = ["二部", "三部", "四部"]
+
+        return (
+            base_order.index(base) if base in base_order else 99,
+            num_order.index(num.group()) if num else 99
+        )
+
+    existing_parts = sorted(
+        df["声部"].dropna().unique().tolist(),
+        key=part_sort_key
+    )
+
+    part_state_key = f"part_init_{id(df)}"
+
+    if part_state_key not in st.session_state:
+        st.session_state[f"all_part_{id(df)}"] = True
+        for p in existing_parts:
+            st.session_state[f"part_{p}_{id(df)}"] = True
+        st.session_state[part_state_key] = True
+
+    def toggle_all_part():
+        for p in existing_parts:
+            st.session_state[f"part_{p}_{id(df)}"] = st.session_state[f"all_part_{id(df)}"]
+
+    def sync_all_part():
+        st.session_state[f"all_part_{id(df)}"] = all(
+            st.session_state.get(f"part_{p}_{id(df)}", False)
+            for p in existing_parts
+        )
+
+    st.checkbox(
+        "すべて選択",
+        key=f"all_part_{id(df)}",
+        on_change=toggle_all_part
+    )
+
+    part_cols = st.columns(len(existing_parts))
+    part_checks = {}
+
+    for col, part in zip(part_cols, existing_parts):
+        with col:
+            part_checks[part] = st.checkbox(
+                part,
+                key=f"part_{part}_{id(df)}",
+                on_change=sync_all_part
+            )
+
+    PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
+
+    # =========================
+    # 区分（チェックボックス）
+    # =========================
+
+    st.markdown("**区分**")
+    type_labels = list(TYPE_MAP.values())
+
+    type_state_key = f"type_init_{id(df)}"
+
+    if type_state_key not in st.session_state:
+        st.session_state[f"all_type_{id(df)}"] = True
+        for t in type_labels:
+            st.session_state[f"type_{t}_{id(df)}"] = True
+        st.session_state[type_state_key] = True
+
+    def toggle_all_type():
+        for t in type_labels:
+            st.session_state[f"type_{t}_{id(df)}"] = st.session_state[f"all_type_{id(df)}"]
+
+    def sync_all_type():
+        st.session_state[f"all_type_{id(df)}"] = all(
+            st.session_state.get(f"type_{t}_{id(df)}", False)
+            for t in type_labels
+        )
+
+    st.checkbox(
+        "すべて選択",
+        key=f"all_type_{id(df)}",
+        on_change=toggle_all_type
+    )
+
+    type_cols = st.columns(len(type_labels))
+    type_checks = {}
+
+    for col, t in zip(type_cols, type_labels):
+        with col:
+            type_checks[t] = st.checkbox(
+                t,
+                key=f"type_{t}_{id(df)}",
+                on_change=sync_all_type
+            )
+
+    TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
+
+    # =========================
+    # 並び替えUI
+    # =========================
+
+    st.divider()
+    st.markdown("### 🔃 並び替え")
+
+    sort_col1, sort_col2 = st.columns([3, 2])
+
+    with sort_col1:
+        sort_key = st.selectbox(
+            "並び替え項目",
+            ["曲名（五十音順）", "声部", "区分"],
+            index=0,
+            key=f"sort_key_{id(df)}"
+        )
+
+    with sort_col2:
+        sort_order = st.radio(
+            "順序",
+            ["昇順", "降順"],
+            horizontal=True,
+            index=0,
+            key=f"sort_order_{id(df)}"
+        )
+
+    # =========================
+    # 検索処理
+    # =========================
+
+    filtered_df = df.copy()
+
+    if title_input:
+        filtered_df = filtered_df[
+            filtered_df["曲名"].str.contains(title_input, case=False, na=False)
+        ]
+
+    if composer_input != "指定しない":
+        filtered_df = filtered_df[
+            filtered_df["作曲・編曲者"] == composer_input
+        ]
+
+    filtered_df = filtered_df[
+        filtered_df["声部"].isin([p for p, v in part_checks.items() if v])
+    ]
+
+    filtered_df = filtered_df[
+        filtered_df["区分"].isin([t for t, v in type_checks.items() if v])
+    ]
+
+    ascending = sort_order == "昇順"
+
+    if sort_key == "曲名（五十音順）":
+        filtered_df = filtered_df.sort_values("code", ascending=ascending)
+
+    elif sort_key == "声部":
+        filtered_df = (
+            filtered_df
+            .assign(_order=filtered_df["声部"].map(PART_ORDER))
+            .sort_values("_order", ascending=ascending)
+            .drop(columns="_order")
+        )
+
+    elif sort_key == "区分":
+        filtered_df = (
+            filtered_df
+            .assign(_order=filtered_df["区分"].map(TYPE_ORDER))
+            .sort_values("_order", ascending=ascending)
+            .drop(columns="_order")
+        )
+
+    return filtered_df
