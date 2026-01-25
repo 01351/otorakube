@@ -27,8 +27,7 @@ st.caption("Google Drive 上のフォルダ別に楽譜PDFを検索できます"
 # =========================
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-# 親フォルダのID
-PARENT_FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
+FOLDER_ID = "1c0JC6zLnipbJcP-2Dfe0QxXNQikSo3hm"
 
 # =========================
 # 定義マップ
@@ -90,11 +89,11 @@ def parse_filename(filename):
     }
 
 # =========================
-# Google Drive 読み込み（子フォルダ対応）
+# Google Drive 読み込み
 # =========================
 
 @st.cache_data(ttl=60, show_spinner=False)
-def load_all_data_from_drive():
+def load_all_from_drive():
     credentials = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=SCOPES
@@ -102,23 +101,20 @@ def load_all_data_from_drive():
 
     service = build("drive", "v3", credentials=credentials)
 
-    # 1. 親フォルダ内の子フォルダ一覧を取得
     folder_results = service.files().list(
-        q=f"'{PARENT_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        q=f"'{FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
         fields="files(id, name)"
     ).execute()
     
-    folders = folder_results.get("files", [])
+    sub_folders = folder_results.get("files", [])
     
-    # フォルダが存在しない場合は親フォルダのみを対象にする
-    if not folders:
-        folders = [{"id": PARENT_FOLDER_ID, "name": "すべての楽譜"}]
+    if not sub_folders:
+        sub_folders = [{"id": FOLDER_ID, "name": "楽譜一覧"}]
 
     all_rows = []
-    folder_list = []
+    folder_names = []
 
-    # 2. 各フォルダ内のPDFを取得
-    for folder in folders:
+    for folder in sub_folders:
         f_id = folder["id"]
         f_name = folder["name"]
         
@@ -129,7 +125,7 @@ def load_all_data_from_drive():
 
         files = results.get("files", [])
         if files:
-            folder_list.append(f_name)
+            folder_names.append(f_name)
             for f in files:
                 parsed = parse_filename(f["name"])
                 if parsed:
@@ -139,45 +135,40 @@ def load_all_data_from_drive():
     if not df.empty:
         df = df.sort_values("code")
 
-    return df, folder_list
+    return df, folder_names
 
-# データ読み込み
-df_all, folder_names = load_all_data_from_drive()
+df_all, folder_names = load_all_from_drive()
 
 # =========================
-# メインUI（タブ表示）
+# タブ表示と検索UI
 # =========================
 
 if df_all.empty:
-    st.info("楽譜が見つかりませんでした。")
+    st.info("条件に一致する楽譜がありません")
 else:
     tabs = st.tabs(folder_names)
 
     for i, tab in enumerate(tabs):
         current_folder = folder_names[i]
         with tab:
-            # 当該フォルダのデータのみ抽出
             df = df_all[df_all["folder_name"] == current_folder].copy()
 
-            # =========================
-            # 検索UI
-            # =========================
+            # --- 検索UI ---
             st.divider()
             st.subheader(f"検索（{current_folder}）")
 
             col1, col2 = st.columns([2, 1])
             with col1:
-                # keyをユニークにするためフォルダ名を付与
-                title_input = st.text_input("🎵 曲名（部分一致）", key=f"title_{current_folder}")
+                title_input = st.text_input("🎵 曲名（部分一致）", key=f"t_in_{current_folder}")
             with col2:
                 composer_list = sorted(df["作曲・編曲者"].dropna().unique().tolist())
-                composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list, key=f"comp_{current_folder}")
+                composer_input = st.selectbox("👤 作曲・編曲者", ["指定しない"] + composer_list, key=f"c_in_{current_folder}")
 
             st.caption("▼ 詳細条件")
 
-            # --- 声部フィルター ---
+            # --- 声部（動的取得 & すべて選択） ---
             st.markdown("**声部**")
-            
+
             def part_sort_key(part):
                 base = re.sub(r"(二部|三部|四部)", "", part)
                 num = re.search(r"(二部|三部|四部)", part)
@@ -189,66 +180,74 @@ else:
                 )
 
             existing_parts = sorted(df["声部"].dropna().unique().tolist(), key=part_sort_key)
-            
-            # フォルダごとにセッション状態を管理
-            if f"init_{current_folder}_part" not in st.session_state:
-                st.session_state[f"all_{current_folder}_part"] = True
+
+            # セッション状態初期化
+            if f"init_part_{current_folder}" not in st.session_state:
+                st.session_state[f"all_part_{current_folder}"] = True
                 for p in existing_parts:
                     st.session_state[f"part_{current_folder}_{p}"] = True
-                st.session_state[f"init_{current_folder}_part"] = True
+                st.session_state[f"init_part_{current_folder}"] = True
 
             def toggle_all_part():
                 for p in existing_parts:
-                    st.session_state[f"part_{current_folder}_{p}"] = st.session_state[f"all_{current_folder}_part"]
+                    st.session_state[f"part_{current_folder}_{p}"] = st.session_state[f"all_part_{current_folder}"]
 
-            st.checkbox("すべて選択", key=f"all_{current_folder}_part", on_change=toggle_all_part)
+            def sync_all_part():
+                st.session_state[f"all_part_{current_folder}"] = all(
+                    st.session_state.get(f"part_{current_folder}_{p}", False) for p in existing_parts
+                )
+
+            st.checkbox("すべて選択", key=f"all_part_{current_folder}", on_change=toggle_all_part)
 
             part_cols = st.columns(len(existing_parts) if len(existing_parts) > 0 else 1)
             part_checks = {}
             for col, part in zip(part_cols, existing_parts):
                 with col:
-                    part_checks[part] = st.checkbox(part, key=f"part_{current_folder}_{part}")
+                    part_checks[part] = st.checkbox(part, key=f"part_{current_folder}_{part}", on_change=sync_all_part)
 
             PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
 
-            # --- 区分フィルター ---
+            # --- 区分（動的取得 & すべて選択） ---
             st.markdown("**区分**")
-            type_labels = list(TYPE_MAP.values())
+            
+            # データ内に存在する区分のみを抽出
+            existing_types = sorted(df["区分"].dropna().unique().tolist())
 
-            if f"init_{current_folder}_type" not in st.session_state:
-                st.session_state[f"all_{current_folder}_type"] = True
-                for t in type_labels:
+            if f"init_type_{current_folder}" not in st.session_state:
+                st.session_state[f"all_type_{current_folder}"] = True
+                for t in existing_types:
                     st.session_state[f"type_{current_folder}_{t}"] = True
-                st.session_state[f"init_{current_folder}_type"] = True
+                st.session_state[f"init_type_{current_folder}"] = True
 
             def toggle_all_type():
-                for t in type_labels:
-                    st.session_state[f"type_{current_folder}_{t}"] = st.session_state[f"all_{current_folder}_type"]
+                for t in existing_types:
+                    st.session_state[f"type_{current_folder}_{t}"] = st.session_state[f"all_type_{current_folder}"]
 
-            st.checkbox("すべて選択", key=f"all_{current_folder}_type", on_change=toggle_all_type)
+            def sync_all_type():
+                st.session_state[f"all_type_{current_folder}"] = all(
+                    st.session_state.get(f"type_{current_folder}_{t}", False) for t in existing_types
+                )
 
-            type_cols = st.columns(len(type_labels))
+            st.checkbox("すべて選択", key=f"all_type_{current_folder}", on_change=toggle_all_type)
+
+            type_cols = st.columns(len(existing_types) if len(existing_types) > 0 else 1)
             type_checks = {}
-            for col, t in zip(type_cols, type_labels):
+            for col, t in zip(type_cols, existing_types):
                 with col:
-                    type_checks[t] = st.checkbox(t, key=f"type_{current_folder}_{t}")
+                    type_checks[t] = st.checkbox(t, key=f"type_{current_folder}_{t}", on_change=sync_all_type)
 
-            TYPE_ORDER = {t: i for i, t in enumerate(type_labels)}
+            TYPE_ORDER = {t: i for i, t in enumerate(existing_types)}
 
-            # =========================
-            # 並び替えUI
-            # =========================
+            # --- 並び替えUI ---
             st.divider()
             st.markdown("### 🔃 並び替え")
             sort_col1, sort_col2 = st.columns([3, 2])
             with sort_col1:
-                sort_key = st.selectbox("並び替え項目", ["曲名（五十音順）", "声部", "区分"], key=f"sort_k_{current_folder}")
+                sort_key = st.selectbox("並び替え項目", ["曲名（五十音順）", "声部", "区分"], key=f"sort_key_{current_folder}")
             with sort_col2:
-                sort_order = st.radio("順序", ["昇順", "降順"], horizontal=True, key=f"sort_o_{current_folder}")
+                sort_order = st.radio("順序", ["昇順", "降順"], horizontal=True, key=f"sort_order_{current_folder}")
 
-            # =========================
-            # 検索処理
-            # =========================
+            # --- 検索処理 ---
             filtered_df = df.copy()
             if title_input:
                 filtered_df = filtered_df[filtered_df["曲名"].str.contains(title_input, case=False, na=False)]
@@ -266,9 +265,7 @@ else:
             elif sort_key == "区分":
                 filtered_df = filtered_df.assign(_order=filtered_df["区分"].map(TYPE_ORDER)).sort_values("_order", ascending=ascending).drop(columns="_order")
 
-            # =========================
-            # 検索結果表示
-            # =========================
+            # --- 検索結果表示 ---
             st.divider()
             st.subheader("検索結果")
             st.markdown(f'<div style="font-size:22px; font-weight:800; border-bottom:3px solid #6366f1; padding-bottom:6px; margin-bottom:12px;">検索結果： {len(filtered_df)} 件</div>', unsafe_allow_html=True)
@@ -287,15 +284,26 @@ else:
                             color = PART_COLOR.get(base_part, "#64748b")
                             with cols[k]:
                                 st.markdown(f"""
-                                <div style="border-left:8px solid {color}; padding:14px; border-radius:12px; background:#ffffff; height:260px; display:grid; grid-template-rows:72px 1fr; row-gap:6px; margin-bottom:24px; color:{TEXT_COLOR};">
-                                <h3 style="margin:0; font-size:20px; font-weight:700; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{r['曲名']}</h3>
-                                <div>
-                                <p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
-                                <p style="margin:0 0 6px 0;">声部：<span style="color:{color};">{r['声部']}</span></p>
-                                <span style="display:inline-block; padding:3px 9px; border-radius:999px; background:#f1f5f9; font-size:13px;">{r['区分']}</span>
-                                <a href="{r['url']}" target="_blank" style="display:block; margin-top:12px; text-align:center; padding:9px; border-radius:8px; background:#e5e7eb; color:{TEXT_COLOR}; text-decoration:none; font-weight:600;">楽譜を開く</a>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
+<div style="
+border-left:8px solid {color};
+padding:14px;
+border-radius:12px;
+background:#ffffff;
+height:260px;
+display:grid;
+grid-template-rows:72px 1fr;
+row-gap:6px;
+margin-bottom:24px;
+color:{TEXT_COLOR};
+">
+<h3 style="margin:0; font-size:20px; font-weight:700; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{r['曲名']}</h3>
+<div>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r['作曲・編曲者']}</p>
+<p style="margin:0 0 6px 0;">声部：<span style="color:{color};">{r['声部']}</span></p>
+<span style="display:inline-block; padding:3px 9px; border-radius:999px; background:#f1f5f9; font-size:13px;">{r['区分']}</span>
+<a href="{r['url']}" target="_blank" style="display:block; margin-top:12px; text-align:center; padding:9px; border-radius:8px; background:#e5e7eb; color:{TEXT_COLOR}; text-decoration:none; font-weight:600;">楽譜を開く</a>
+</div>
+</div>
+""", unsafe_allow_html=True)
                         else:
                             with cols[k]: st.empty()
