@@ -39,12 +39,22 @@ TYPE_MAP = {
     "D": "特殊"
 }
 
+TYPE_ORDER = [
+    "オリジナル（伴奏有）",
+    "オリジナル（無伴奏）",
+    "アレンジ",
+    "特殊"
+]
+
 PART_BASE_MAP = {
     "G": "混声",
     "F": "女声",
     "M": "男声",
     "U": "斉唱"
 }
+
+PART_BASE_ORDER = ["混声", "女声", "男声", "斉唱"]
+PART_NUM_ORDER = ["二部", "三部", "四部"]
 
 NUM_MAP = {
     "2": "二部",
@@ -74,18 +84,35 @@ def parse_filename(filename):
     code, title, t, p, n, composer = m.groups()
     composer = composer.replace("★", "").strip()
 
-    if p == "U":
-        part = "斉唱"
-    else:
-        part = f"{PART_BASE_MAP[p]}{NUM_MAP.get(n, '')}"
+    base = PART_BASE_MAP.get(p)
+    num = NUM_MAP.get(n, "")
+
+    part = base + num if base else "不明"
+    section = TYPE_MAP.get(t, "不明")
 
     return {
         "code": code,
         "曲名": title.strip(),
         "作曲・編曲者": composer,
         "声部": part,
-        "区分": TYPE_MAP.get(t, "不明")
+        "区分": section
     }
+
+# =========================
+# 並び替え用キー生成
+# =========================
+
+def part_sort_key(p):
+    base = re.sub(r"(二部|三部|四部)", "", p)
+    num = re.search(r"(二部|三部|四部)", p)
+
+    base_i = PART_BASE_ORDER.index(base) if base in PART_BASE_ORDER else 99
+    num_i = PART_NUM_ORDER.index(num.group()) if num and num.group() in PART_NUM_ORDER else 99
+
+    return (base_i, num_i)
+
+def type_sort_key(t):
+    return TYPE_ORDER.index(t) if t in TYPE_ORDER else 99
 
 # =========================
 # Google Drive 読み込み
@@ -131,9 +158,6 @@ def load_all_from_drive():
                     })
 
     df = pd.DataFrame(all_rows)
-    if not df.empty:
-        df = df.sort_values("code")
-
     return df, folder_names
 
 df_all, folder_names = load_all_from_drive()
@@ -148,146 +172,41 @@ else:
     tabs = st.tabs(folder_names)
 
     for i, tab in enumerate(tabs):
-        current_folder = folder_names[i]
-        safe_folder = re.sub(r"\W+", "_", current_folder)
+        folder = folder_names[i]
 
         with tab:
-            df = df_all[df_all["folder_name"] == current_folder].copy()
+            df = df_all[df_all["folder_name"] == folder].copy()
+
+            # --- フィルタ候補（1件でも必ず出す） ---
+            all_parts = sorted(df["声部"].unique(), key=part_sort_key)
+            all_types = sorted(df["区分"].unique(), key=type_sort_key)
 
             # =========================
-            # 検索 & 表示切替
+            # 検索UI
             # =========================
 
-            st.divider()
-            st.subheader(f"検索（{current_folder}）")
+            st.subheader(f"検索（{folder}）")
 
-            c1, c2, c3 = st.columns([2, 1, 1])
-            with c1:
-                title_input = st.text_input(
-                    "🎵 曲名（部分一致）",
-                    key=f"title_{safe_folder}"
-                )
-            with c2:
-                composers = sorted(df["作曲・編曲者"].dropna().unique())
-                composer_input = st.selectbox(
-                    "👤 作曲・編曲者",
-                    ["指定しない"] + composers,
-                    key=f"composer_{safe_folder}"
-                )
-            with c3:
-                view_mode = st.radio(
-                    "表示形式",
-                    ["カード", "一覧"],
-                    horizontal=True,
-                    key=f"view_{safe_folder}"
-                )
+            title_input = st.text_input("🎵 曲名", key=f"title_{folder}")
+
+            st.markdown("**声部**")
+            selected_parts = st.multiselect(
+                "",
+                all_parts,
+                default=all_parts,
+                key=f"parts_{folder}"
+            )
+
+            st.markdown("**区分**")
+            selected_types = st.multiselect(
+                "",
+                all_types,
+                default=all_types,
+                key=f"types_{folder}"
+            )
 
             # =========================
-            # 声部フィルタ
-            # =========================
-
-            existing_parts = sorted(df["声部"].dropna().unique())
-            selected_parts = existing_parts.copy()
-
-            if len(existing_parts) > 1:
-                st.markdown("**声部**")
-
-                master = f"all_part_{safe_folder}"
-                st.session_state.setdefault(master, True)
-
-                for p in existing_parts:
-                    st.session_state.setdefault(f"part_{safe_folder}_{p}", True)
-
-                def cb_part_all():
-                    v = st.session_state[master]
-                    for p in existing_parts:
-                        st.session_state[f"part_{safe_folder}_{p}"] = v
-
-                def cb_part_sync():
-                    st.session_state[master] = all(
-                        st.session_state[f"part_{safe_folder}_{p}"]
-                        for p in existing_parts
-                    )
-
-                st.checkbox("すべて選択", key=master, on_change=cb_part_all)
-
-                cols = st.columns(len(existing_parts))
-                selected_parts = []
-                for col, p in zip(cols, existing_parts):
-                    with col:
-                        st.checkbox(
-                            p,
-                            key=f"part_{safe_folder}_{p}",
-                            on_change=cb_part_sync
-                        )
-                        if st.session_state[f"part_{safe_folder}_{p}"]:
-                            selected_parts.append(p)
-
-            # =========================
-            # 区分フィルタ
-            # =========================
-
-            existing_types = sorted(df["区分"].dropna().unique())
-            selected_types = existing_types.copy()
-
-            if len(existing_types) > 1:
-                st.markdown("**区分**")
-
-                master = f"all_type_{safe_folder}"
-                st.session_state.setdefault(master, True)
-
-                for t in existing_types:
-                    st.session_state.setdefault(f"type_{safe_folder}_{t}", True)
-
-                def cb_type_all():
-                    v = st.session_state[master]
-                    for t in existing_types:
-                        st.session_state[f"type_{safe_folder}_{t}"] = v
-
-                def cb_type_sync():
-                    st.session_state[master] = all(
-                        st.session_state[f"type_{safe_folder}_{t}"]
-                        for t in existing_types
-                    )
-
-                st.checkbox("すべて選択", key=master, on_change=cb_type_all)
-
-                cols = st.columns(len(existing_types))
-                selected_types = []
-                for col, t in zip(cols, existing_types):
-                    with col:
-                        st.checkbox(
-                            t,
-                            key=f"type_{safe_folder}_{t}",
-                            on_change=cb_type_sync
-                        )
-                        if st.session_state[f"type_{safe_folder}_{t}"]:
-                            selected_types.append(t)
-
-            # =========================
-            # 並び替え
-            # =========================
-
-            st.divider()
-            st.markdown("### 🔃 並び替え")
-
-            s1, s2 = st.columns([3, 2])
-            with s1:
-                sort_key = st.selectbox(
-                    "並び替え項目",
-                    ["曲名（五十音順）", "声部", "区分"],
-                    key=f"sort_key_{safe_folder}"
-                )
-            with s2:
-                sort_order = st.radio(
-                    "順序",
-                    ["昇順", "降順"],
-                    horizontal=True,
-                    key=f"sort_order_{safe_folder}"
-                )
-
-            # =========================
-            # フィルタ処理
+            # フィルタ
             # =========================
 
             filtered_df = df.copy()
@@ -297,91 +216,49 @@ else:
                     filtered_df["曲名"].str.contains(title_input, na=False)
                 ]
 
-            if composer_input != "指定しない":
-                filtered_df = filtered_df[
-                    filtered_df["作曲・編曲者"] == composer_input
-                ]
-
             filtered_df = filtered_df[
                 filtered_df["声部"].isin(selected_parts)
                 & filtered_df["区分"].isin(selected_types)
             ]
 
-            ascending = sort_order == "昇順"
-            PART_ORDER = {p: i for i, p in enumerate(existing_parts)}
-            TYPE_ORDER = {t: i for i, t in enumerate(existing_types)}
+            # =========================
+            # 並び替え（固定仕様）
+            # =========================
 
-            if sort_key == "曲名（五十音順）":
-                filtered_df = filtered_df.sort_values("code", ascending=ascending)
-            elif sort_key == "声部":
-                filtered_df = (
-                    filtered_df
-                    .assign(_o=filtered_df["声部"].map(PART_ORDER))
-                    .sort_values("_o", ascending=ascending)
-                    .drop(columns="_o")
-                )
-            elif sort_key == "区分":
-                filtered_df = (
-                    filtered_df
-                    .assign(_o=filtered_df["区分"].map(TYPE_ORDER))
-                    .sort_values("_o", ascending=ascending)
-                    .drop(columns="_o")
-                )
+            filtered_df["_part"] = filtered_df["声部"].apply(part_sort_key)
+            filtered_df["_type"] = filtered_df["区分"].apply(type_sort_key)
+
+            filtered_df = filtered_df.sort_values(
+                ["_part", "_type", "code"]
+            ).drop(columns=["_part", "_type"])
 
             # =========================
-            # 結果表示
+            # カード表示
             # =========================
 
             st.divider()
-            st.markdown(
-                f'<div style="font-size:22px;font-weight:800;border-bottom:3px solid #6366f1;padding-bottom:6px;">検索結果： {len(filtered_df)} 件</div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f"### 検索結果：{len(filtered_df)} 件")
 
-            if filtered_df.empty:
-                st.info("条件に一致する楽譜がありません")
-                continue
+            cards_per_row = 3
 
-            # =========================
-            # 一覧表示
-            # =========================
+            for start in range(0, len(filtered_df), cards_per_row):
+                row_df = filtered_df.iloc[start:start + cards_per_row]
+                cols = st.columns(cards_per_row)
 
-            if view_mode == "一覧":
-                show_df = filtered_df[[
-                    "曲名", "作曲・編曲者", "声部", "区分", "url"
-                ]].rename(columns={"url": "楽譜リンク"})
+                for idx, (_, r) in enumerate(row_df.iterrows()):
+                    base = re.sub(r"(二部|三部|四部)", "", r["声部"])
+                    color = PART_COLOR.get(base, "#64748b")
 
-                st.dataframe(
-                    show_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-            # =========================
-            # カード表示（壊れない版）
-            # =========================
-
-            else:
-                cards_per_row = 3
-
-                for start in range(0, len(filtered_df), cards_per_row):
-                    row_df = filtered_df.iloc[start:start + cards_per_row]
-                    cols = st.columns(cards_per_row)
-
-                    for idx, (_, r) in enumerate(row_df.iterrows()):
-                        base = re.sub(r"(二部|三部|四部)", "", r["声部"])
-                        color = PART_COLOR.get(base, "#64748b")
-
-                        with cols[idx]:
-                            st.markdown(
-                                f"""
-<div style="border-left:8px solid {color};padding:14px;border-radius:12px;background:#ffffff;min-height:260px;margin-bottom:24px;color:{TEXT_COLOR};">
-<h3 style="margin:0;font-size:20px;font-weight:700;line-height:1.2;">{r["曲名"]}</h3>
+                    with cols[idx]:
+                        st.markdown(
+                            f"""
+<div style="border-left:8px solid {color}; padding:14px; border-radius:12px; background:#ffffff; min-height:260px;">
+<h3>{r["曲名"]}</h3>
 <p>作曲・編曲者：{r["作曲・編曲者"]}</p>
 <p>声部：<span style="color:{color};">{r["声部"]}</span></p>
-<span style="padding:3px 9px;border-radius:999px;background:#f1f5f9;font-size:13px;">{r["区分"]}</span>
-<a href="{r["url"]}" target="_blank" style="display:block;margin-top:12px;text-align:center;padding:9px;border-radius:8px;background:#e5e7eb;color:{TEXT_COLOR};font-weight:600;text-decoration:none;">楽譜を開く</a>
+<span>{r["区分"]}</span>
+<a href="{r["url"]}" target="_blank">楽譜を開く</a>
 </div>
 """,
-                                unsafe_allow_html=True
-                            )
+                            unsafe_allow_html=True
+                        )
