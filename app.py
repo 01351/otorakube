@@ -331,3 +331,138 @@ else:
                     .sort_values("_o", ascending=ascending)
                     .drop(columns="_o")
                 )
+            # =========================
+            # 検索結果表示
+            # =========================
+
+            st.divider()
+            st.markdown(
+                f"""
+<div style="
+    font-size:22px;
+    font-weight:800;
+    border-bottom:3px solid #6366f1;
+    padding-bottom:6px;
+    margin-bottom:12px;
+">
+検索結果： {len(filtered_df)} 件
+</div>
+""",
+                unsafe_allow_html=True
+            )
+
+            if filtered_df.empty:
+                st.info("条件に一致する楽譜がありません")
+            else:
+                # =========================
+                # 一覧表示
+                # =========================
+                if view_mode == "一覧":
+                    show_df = filtered_df[[
+                        "曲名",
+                        "作曲・編曲者",
+                        "声部",
+                        "区分",
+                        "url"
+                    ]].rename(columns={
+                        "url": "楽譜リンク"
+                    })
+
+                    st.dataframe(
+                        show_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                # =========================
+                # カード表示
+                # =========================
+                else:
+                    cards_per_row = 3
+
+                    for start in range(0, len(filtered_df), cards_per_row):
+                        row_df = filtered_df.iloc[start:start + cards_per_row]
+                        cols = st.columns(cards_per_row)
+
+                        for idx, r in enumerate(row_df.itertuples()):
+                            base_part = re.sub(
+                                r"(二部|三部|四部)",
+                                "",
+                                r.声部
+                            )
+                            color = PART_COLOR.get(
+                                base_part,
+                                "#64748b"
+                            )
+
+                            with cols[idx]:
+                                st.markdown(
+                                    f"""
+<div style="
+    border-left:8px solid {color};
+    padding:14px;
+    border-radius:12px;
+    background:#ffffff;
+    min-height:260px;
+    display:grid;
+    grid-template-rows:72px 1fr;
+    row-gap:6px;
+    margin-bottom:24px;
+    color:{TEXT_COLOR};
+">
+    <h3 style="
+        margin:0;
+        font-size:20px;
+        font-weight:700;
+        line-height:1.2;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
+    ">
+        {r.曲名}
+    </h3>
+
+    <div>
+        <p style="margin:0 0 6px 0;">
+            作曲・編曲者：{r.作曲・編曲者}
+        </p>
+
+        <p style="margin:0 0 6px 0;">
+            声部：
+            <span style="color:{color}; font-weight:600;">
+                {r.声部}
+            </span>
+        </p>
+
+        <span style="
+            display:inline-block;
+            padding:3px 9px;
+            border-radius:999px;
+            background:#f1f5f9;
+            font-size:13px;
+            margin-bottom:10px;
+        ">
+            {r.区分}
+        </span>
+
+        <a href="{r.url}"
+           target="_blank"
+           style="
+                display:block;
+                margin-top:12px;
+                text-align:center;
+                padding:9px;
+                border-radius:8px;
+                background:#e5e7eb;
+                color:{TEXT_COLOR};
+                text-decoration:none;
+                font-weight:600;
+           ">
+            楽譜を開く
+        </a>
+    </div>
+</div>
+""",
+                                    unsafe_allow_html=True
+                                )
