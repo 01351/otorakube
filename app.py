@@ -236,10 +236,14 @@ for i, tab in enumerate(tabs):
                 for t in types:
                     st.session_state[f"type_{safe}_{t}"] = v
 
-            def sync_type_each():
+            def sync_type_each(safe, types):
+                key_all = f"type_all_{safe}"
+
                 st.session_state[key_all] = all(
-                    st.session_state[f"type_{safe}_{t}"] for t in types
-                )
+                    st.session_state.get(f"type_{safe}_{t}", False)
+                    for t in types
+                 )
+
 
             st.checkbox("すべて選択", key=key_all, on_change=sync_type_all)
 
