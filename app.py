@@ -244,6 +244,17 @@ for i, tab in enumerate(tabs):
                     for t in types
                  )
 
+            def sync_type_all():
+                for key in list(st.session_state.keys()):
+                    if not key.startswith("type_all_"):
+                        continue
+
+                    safe = key.replace("type_all_", "")
+                    checked = st.session_state.get(key, False)
+
+                    for t in TYPE_MAP.get(safe, []):
+                        st.session_state[f"type_{safe}_{t}"] = checked
+
 
             st.checkbox("すべて選択", key=key_all, on_change=sync_type_all)
 
