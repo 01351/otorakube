@@ -154,6 +154,10 @@ else:
         with tab:
             df = df_all[df_all["folder_name"] == current_folder].copy()
 
+            # =========================
+            # 検索UI
+            # =========================
+
             st.divider()
             st.subheader(f"検索（{current_folder}）")
 
@@ -169,7 +173,7 @@ else:
                 )
 
             # =========================
-            # 声部
+            # 声部（すべて選択）
             # =========================
 
             st.markdown("**声部**")
@@ -184,7 +188,6 @@ else:
 
             existing_parts = sorted(df["声部"].dropna().unique(), key=part_sort_key)
 
-            # --- 初期化 ---
             master_key = f"all_part_{current_folder}"
             if master_key not in st.session_state:
                 st.session_state[master_key] = True
@@ -194,7 +197,6 @@ else:
                 if k not in st.session_state:
                     st.session_state[k] = True
 
-            # --- callbacks ---
             def cb_toggle_all_parts():
                 v = st.session_state.get(master_key, False)
                 for p in existing_parts:
@@ -222,13 +224,14 @@ else:
                         selected_parts.append(p)
 
             # =========================
-            # 区分
+            # 区分（すべて選択）
             # =========================
 
             st.markdown("**区分**")
-            existing_types = sorted(df["区分"].dropna().unique())
 
+            existing_types = sorted(df["区分"].dropna().unique())
             type_master = f"all_type_{current_folder}"
+
             if type_master not in st.session_state:
                 st.session_state[type_master] = True
 
@@ -264,7 +267,7 @@ else:
                         selected_types.append(t)
 
             # =========================
-            # フィルタ & 表示
+            # フィルタリング
             # =========================
 
             filtered_df = df.copy()
@@ -279,11 +282,37 @@ else:
                 & filtered_df["区分"].isin(selected_types)
             ]
 
+            # =========================
+            # カード表示
+            # =========================
+
             st.divider()
-            st.markdown(f"### 検索結果：{len(filtered_df)} 件")
+            st.markdown(
+                f'<div style="font-size:22px; font-weight:800; border-bottom:3px solid #6366f1; padding-bottom:6px; margin-bottom:12px;">検索結果： {len(filtered_df)} 件</div>',
+                unsafe_allow_html=True
+            )
 
             if filtered_df.empty:
                 st.info("条件に一致する楽譜がありません")
             else:
-                for _, r in filtered_df.iterrows():
-                    st.markdown(f"- **{r['曲名']}**（{r['声部']} / {r['区分']}）")
+                cards_per_row = 3
+                for i in range(0, len(filtered_df), cards_per_row):
+                    row = filtered_df.iloc[i:i + cards_per_row]
+                    cols = st.columns(cards_per_row)
+
+                    for j, r in enumerate(row.itertuples()):
+                        base_part = re.sub(r"(二部|三部|四部)", "", r.声部)
+                        color = PART_COLOR.get(base_part, "#64748b")
+
+                        with cols[j]:
+                            st.markdown(f"""
+<div style="border-left:8px solid {color}; padding:14px; border-radius:12px; background:#ffffff; height:260px; display:grid; grid-template-rows:72px 1fr; row-gap:6px; margin-bottom:24px; color:{TEXT_COLOR};">
+<h3 style="margin:0; font-size:20px; font-weight:700; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{r.曲名}</h3>
+<div>
+<p style="margin:0 0 6px 0;">作曲・編曲者：{r.作曲・編曲者}</p>
+<p style="margin:0 0 6px 0;">声部：<span style="color:{color};">{r.声部}</span></p>
+<span style="display:inline-block; padding:3px 9px; border-radius:999px; background:#f1f5f9; font-size:13px;">{r.区分}</span>
+<a href="{r.url}" target="_blank" style="display:block; margin-top:12px; text-align:center; padding:9px; border-radius:8px; background:#e5e7eb; color:{TEXT_COLOR}; text-decoration:none; font-weight:600;">楽譜を開く</a>
+</div>
+</div>
+""", unsafe_allow_html=True)
