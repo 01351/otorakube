@@ -24,6 +24,10 @@ st.set_page_config(
 st.title("楽譜管理システム")
 st.caption("Google Drive 上のフォルダ別に楽譜PDFを検索できます")
 
+if "global_sort" not in st.session_state:
+    st.session_state["global_sort"] = "声部順（標準）"
+
+
 # =========================
 # Google Drive 設定
 # =========================
