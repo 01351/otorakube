@@ -206,7 +206,16 @@ for i, tab in enumerate(tabs):
         # =========================
 
         st.markdown("**声部**")
-        parts = sorted(df["声部"].unique())
+        def part_sort_key(part):
+            base = re.sub(r"(二部|三部|四部)", "", part)
+            num = re.sub(r"(混声|女声|男声|斉唱)", "", part)
+
+            base_order = PART_BASE_ORDER.index(base) if base in PART_BASE_ORDER else 99
+            num_order = NUM_ORDER.index(num) if num in NUM_ORDER else 99
+
+            return (base_order, num_order)
+
+        parts = sorted(df["声部"].unique(), key=part_sort_key)
         selected_parts = parts.copy()
 
         if len(parts) == 1:
