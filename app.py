@@ -180,9 +180,6 @@ for i, tab in enumerate(tabs):
         safe = re.sub(r"\W+", "_", folder)
         df = df_all[df_all["folder_name"] == folder].copy()
 
-    with tab:
-        df = df_all[df_all["folder_name"] == folder].copy()
-
         st.divider()
         st.subheader(f"検索（{folder}）")
 
