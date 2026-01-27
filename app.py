@@ -153,6 +153,14 @@ def load_all_from_drive():
 df_all, folder_names = load_all_from_drive()
 
 # =========================
+# フォルダ横断タブ追加
+# =========================
+
+all_tabs = ["すべて"] + folder_names
+tabs = st.tabs(all_tabs)
+
+
+# =========================
 # メイン処理
 # =========================
 
@@ -163,8 +171,14 @@ if df_all.empty:
 tabs = st.tabs(folder_names)
 
 for i, tab in enumerate(tabs):
-    folder = folder_names[i]
-    safe = re.sub(r"\W+", "_", folder)
+    if i == 0:
+        folder = "すべて"
+        df = df_all.copy()
+        safe = "all"
+    else:
+        folder = folder_names[i - 1]
+        safe = re.sub(r"\W+", "_", folder)
+        df = df_all[df_all["folder_name"] == folder].copy()
 
     with tab:
         df = df_all[df_all["folder_name"] == folder].copy()
