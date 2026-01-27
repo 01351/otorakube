@@ -168,20 +168,21 @@ if df_all.empty:
     st.info("条件に一致する楽譜がありません")
     st.stop()
 
-tabs = st.tabs(folder_names)
 
 for i, tab in enumerate(tabs):
-    if i == 0:
-        folder = "すべて"
-        df = df_all.copy()
-        safe = "all"
-    else:
-        folder = folder_names[i - 1]
-        safe = re.sub(r"\W+", "_", folder)
-        df = df_all[df_all["folder_name"] == folder].copy()
+    with tab:
+        if i == 0:
+            folder = "すべて"
+            df = df_all.copy()
+            safe = "all"
+        else:
+            folder = folder_names[i - 1]
+            safe = re.sub(r"\W+", "_", folder)
+            df = df_all[df_all["folder_name"] == folder].copy()
 
         st.divider()
         st.subheader(f"検索（{folder}）")
+
 
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
