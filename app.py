@@ -172,3 +172,138 @@ st.divider()
 # タブ定義
 # =========================
 tabs = st.tabs(["すべて", "混声", "女声", "男声"])
+# =========================
+# タブ内：検索・並び替え・表示処理
+# =========================
+
+tab_labels = ["すべて", "混声", "女声", "男声"]
+
+for tab, label in zip(tabs, tab_labels):
+    with tab:
+        # -------------------------
+        # 対象データ抽出
+        # -------------------------
+        df_f = df.copy()
+
+        if label != "すべて":
+            df_f = df_f[df_f["声部区分"] == label]
+
+        # -------------------------
+        # 検索フィルタ
+        # -------------------------
+        if keyword:
+            df_f = df_f[
+                df_f["曲名"].str.contains(keyword, na=False)
+                | df_f["作曲・編曲者"].str.contains(keyword, na=False)
+            ]
+
+        if part_filter:
+            df_f = df_f[df_f["声部区分"].isin(part_filter)]
+
+        if type_filter:
+            df_f = df_f[df_f["区分"].isin(type_filter)]
+
+        # -------------------------
+        # 並び替え
+        # -------------------------
+        sort_key = st.session_state["global_sort"]
+
+        if sort_key == "声部順（標準）":
+            df_f = df_f.sort_values(
+                ["_pb", "_pn", "_to", "code"],
+                ascending=[True, True, True, True]
+            )
+
+        elif sort_key == "曲名（昇順）":
+            df_f = df_f.sort_values("曲名", ascending=True)
+
+        elif sort_key == "曲名（降順）":
+            df_f = df_f.sort_values("曲名", ascending=False)
+
+        elif sort_key == "作曲・編曲者（昇順）":
+            df_f = df_f.sort_values("作曲・編曲者", ascending=True)
+
+        elif sort_key == "作曲・編曲者（降順）":
+            df_f = df_f.sort_values("作曲・編曲者", ascending=False)
+
+        elif sort_key == "コード（昇順）":
+            df_f = df_f.sort_values("code", ascending=True)
+
+        elif sort_key == "コード（降順）":
+            df_f = df_f.sort_values("code", ascending=False)
+
+        # -------------------------
+        # 件数表示
+        # -------------------------
+        st.markdown(f"### 🔍 検索結果：{len(df_f)} 件")
+
+        if df_f.empty:
+            st.info("条件に一致する楽譜がありません")
+            continue
+
+        # -------------------------
+        # 表示切り替え
+        # -------------------------
+        view_mode = st.session_state["global_view"]
+
+        # ===== 一覧表示 =====
+        if view_mode == "一覧":
+            st.dataframe(
+                df_f[
+                    ["code", "曲名", "作曲・編曲者", "声部区分", "声部", "区分", "link"]
+                ].rename(columns={"link": "楽譜リンク"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        # ===== カード表示 =====
+        else:
+            cards_per_row = 3
+
+            for start in range(0, len(df_f), cards_per_row):
+                row_df = df_f.iloc[start:start + cards_per_row]
+                cols = st.columns(len(row_df))
+
+                for col, (_, r) in zip(cols, row_df.iterrows()):
+                    with col:
+                        st.markdown(
+                            f"""
+<div style="
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:24px;
+    background:#ffffff;
+    min-height:260px;
+">
+    <h3 style="margin-top:0;">{r["曲名"]}</h3>
+    <p>作曲・編曲者：{r["作曲・編曲者"] or "―"}</p>
+    <p>声部：<strong>{r["声部区分"]} {r["声部"]}</strong></p>
+    <span style="
+        display:inline-block;
+        padding:4px 10px;
+        border-radius:999px;
+        background:#f1f5f9;
+        font-size:13px;
+        margin-bottom:8px;
+    ">
+        {r["区分"]}
+    </span>
+    <a href="{r["link"]}" target="_blank"
+       style="
+           display:block;
+           margin-top:14px;
+           text-align:center;
+           padding:10px;
+           border-radius:10px;
+           background:#e5e7eb;
+           font-weight:600;
+           text-decoration:none;
+           color:#0f172a;
+       ">
+       楽譜を開く
+    </a>
+</div>
+""",
+                            unsafe_allow_html=True
+                        )
