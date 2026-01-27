@@ -144,7 +144,7 @@ with c3:
 c_view, c_sort = st.columns([1, 2])
 
 with c_view:
-    st.session_state["global_view"] = st.radio(
+    st.radio(
         "表示形式",
         ["カード", "一覧"],
         horizontal=True,
@@ -152,7 +152,7 @@ with c_view:
     )
 
 with c_sort:
-    st.session_state["global_sort"] = st.selectbox(
+    st.selectbox(
         "↕ 並び替え",
         [
             "声部順（標準）",
