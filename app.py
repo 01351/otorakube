@@ -214,7 +214,7 @@ for i, tab in enumerate(tabs):
                     "コード（昇順）",
                     "コード（降順）",
                 ],
-                key=f"sort_{safe}"
+                key="global_sort"
             )
 
         # =========================
