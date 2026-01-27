@@ -182,7 +182,9 @@ for i, tab in enumerate(tabs):
         st.subheader(f"検索（{folder}）")
 
 
-        c1, c2, c3 = st.columns([2, 1, 1])
+        
+
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         with c1:
             title_input = st.text_input("🎵 曲名", key=f"title_{safe}")
         with c2:
@@ -198,6 +200,21 @@ for i, tab in enumerate(tabs):
                 ["カード", "一覧"],
                 horizontal=True,
                 key=f"view_{safe}"
+            )
+
+        with c4:
+            sort_key = st.selectbox(
+                "↕ 並び替え",
+                [
+                    "声部順（標準）",
+                    "曲名（昇順）",
+                    "曲名（降順）",
+                    "作曲・編曲者（昇順）",
+                    "作曲・編曲者（降順）",
+                    "コード（昇順）",
+                    "コード（降順）",
+                ],
+                key=f"sort_{safe}"
             )
 
         # =========================
