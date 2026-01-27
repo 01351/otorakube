@@ -27,6 +27,8 @@ st.caption("Google Drive 上のフォルダ別に楽譜PDFを検索できます"
 if "global_sort" not in st.session_state:
     st.session_state["global_sort"] = "声部順（標準）"
 
+if "global_view" not in st.session_state:
+    st.session_state["global_view"] = "カード"
 
 # =========================
 # Google Drive 設定
