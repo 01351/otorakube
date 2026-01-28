@@ -321,6 +321,10 @@ for i, tab in enumerate(tabs):
             st.info("条件に一致する楽譜がありません")
             continue
 
+        # ★ 最終的な表示順をコード順で確定
+        filtered = filtered.sort_values("code").reset_index(drop=True)
+
+
         # =========================
         # 表示
         # =========================
