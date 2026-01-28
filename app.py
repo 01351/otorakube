@@ -47,6 +47,7 @@ PART_BASE_MAP = {
     "G": "混声",
     "F": "女声",
     "M": "男声",
+    "S": "同声",
     "U": "斉唱"
 }
 
@@ -56,7 +57,7 @@ NUM_MAP = {
     "4": "四部"
 }
 
-PART_BASE_ORDER = ["混声", "女声", "男声", "斉唱"]
+PART_BASE_ORDER = ["混声", "女声", "男声", "同声", "斉唱"]
 NUM_ORDER = ["二部", "三部", "四部"]
 TYPE_ORDER = [
     "オリジナル（伴奏有）",
@@ -69,6 +70,7 @@ PART_COLOR = {
     "混声": "#16a34a",
     "女声": "#db2777",
     "男声": "#2563eb",
+    "同声": "#9333ea",
     "斉唱": "#9333ea"
 }
 
@@ -79,7 +81,7 @@ TEXT_COLOR = "#0f172a"
 # =========================
 
 def parse_filename(filename):
-    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMU])([234]?)(.+)\.pdf$"
+    pattern = r"^(\d{2})(.+?)-([ABCD])([GFMSU])([234]?)(.+)\.pdf$"
     m = re.match(pattern, filename)
     if not m:
         return None
@@ -208,7 +210,7 @@ for i, tab in enumerate(tabs):
         st.markdown("**声部**")
         def part_sort_key(part):
             base = re.sub(r"(二部|三部|四部)", "", part)
-            num = re.sub(r"(混声|女声|男声|斉唱)", "", part)
+            num = re.sub(r"(混声|女声|男声|同声|斉唱)", "", part)
 
             base_order = PART_BASE_ORDER.index(base) if base in PART_BASE_ORDER else 99
             num_order = NUM_ORDER.index(num) if num in NUM_ORDER else 99
